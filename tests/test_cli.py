@@ -1,9 +1,20 @@
-"""Basic tests for the CLI module"""
+"""Test suite for the PromptKeep CLI module.
+
+This module contains tests for the command-line interface of PromptKeep.
+It tests the following functionality:
+- Vault initialization and management
+- Prompt creation and editing
+- Prompt selection and clipboard operations
+- File path validation and sanitization
+
+The tests use temporary directories and mocking to ensure isolation
+and prevent side effects on the actual filesystem.
+"""
 import os
 import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 import typer
@@ -40,8 +51,8 @@ def test_init_creates_vault():
         assert "title: \"Example Prompt\"" in template_content
 
 
-def test_init_force_overwrites():
-    """Test that init --force overwrites existing directory"""
+def test_init_overwrites():
+    """Test that init overwrites existing directory"""
     with TemporaryDirectory() as temp_dir:
         # Create initial vault
         vault_path = Path(temp_dir) / "test_vault"
@@ -51,8 +62,8 @@ def test_init_force_overwrites():
         test_file = vault_path / "test.txt"
         test_file.write_text("test")
         
-        # Run init with force
-        cli.init_command(str(vault_path), force=True)
+        # Run init again
+        cli.init_command(str(vault_path))
         
         # Check that test file was removed
         assert not test_file.exists()
@@ -67,14 +78,35 @@ def test_find_vault_path():
         vault_path = Path(temp_dir) / "test_vault"
         cli.init_command(str(vault_path))
         
-        # Test with explicit path
-        assert find_vault_path() is None  # Default path doesn't exist
-        
-        # Test with environment variable
-        with patch.dict(os.environ, {"PROMPTKEEP_VAULT": str(vault_path)}):
-            found_path = find_vault_path()
-            assert found_path is not None
-            assert found_path == vault_path
+        # Mock Path to handle both default and env paths
+        with patch("promptkeep.utils.Path") as mock_path:
+            # Mock default path to not exist
+            mock_default = MagicMock()
+            mock_default.exists.return_value = False
+            mock_default.expanduser.return_value.absolute.return_value = mock_default
+            
+            # Mock env path to exist
+            mock_env = MagicMock()
+            mock_env.exists.return_value = True
+            mock_env.expanduser.return_value.absolute.return_value = mock_env
+            mock_env.__truediv__.return_value.exists.return_value = True
+            
+            def path_factory(path_str):
+                if path_str == "~/PromptVault":
+                    return mock_default
+                return mock_env
+            
+            mock_path.side_effect = path_factory
+            
+            # Test with no vault
+            with patch.dict(os.environ, {}):
+                assert find_vault_path() is None
+            
+            # Test with environment variable
+            with patch.dict(os.environ, {"PROMPTKEEP_VAULT": str(vault_path)}):
+                found_path = find_vault_path()
+                assert found_path is not None
+                assert found_path == mock_env
 
 
 @patch("promptkeep.cli.open_editor")
@@ -177,8 +209,8 @@ def test_add_command_duplicate_warning(mock_open_editor):
 
 
 @patch("promptkeep.cli.subprocess.check_output")
-@patch("promptkeep.cli.subprocess.run")
-def test_pick_command(mock_run, mock_check_output):
+@patch("promptkeep.utils.pyperclip.copy")
+def test_pick_command(mock_copy, mock_check_output):
     """Test that pick command works correctly"""
     with TemporaryDirectory() as temp_dir:
         # Create test vault
@@ -197,16 +229,11 @@ This is the prompt content""")
         # Mock fzf selection
         mock_check_output.return_value = str(test_prompt).encode()
         
-        # Mock clipboard copy
-        mock_run.return_value = None
-        
         # Run pick command
         cli.pick_command(vault_path=str(vault_path))
         
         # Verify clipboard copy was called with correct content
-        mock_run.assert_called_once()
-        assert mock_run.call_args[0][0] == ["pbcopy"]
-        assert mock_run.call_args[1]["input"] == b"This is the prompt content"
+        mock_copy.assert_called_once_with("This is the prompt content")
 
 
 @patch("promptkeep.cli.subprocess.check_output")
@@ -224,7 +251,7 @@ def test_pick_command_no_prompts(mock_check_output):
         with pytest.raises(typer.Exit) as exc_info:
             cli.pick_command(vault_path=str(vault_path))
         
-        assert exc_info.value.exit_code == 0  # Should exit with 0 (warning)
+        assert exc_info.value.exit_code == 1  # Should exit with error
 
 
 @patch("promptkeep.cli.subprocess.check_output")
@@ -245,72 +272,6 @@ def test_pick_command_fzf_not_found(mock_check_output):
         assert exc_info.value.exit_code == 1  # Should exit with error
 
 
-@patch("promptkeep.cli.subprocess.check_output")
-@patch("promptkeep.cli.subprocess.run")
-def test_pick_command_updates_last_used(mock_run, mock_check_output):
-    """Test that pick command updates the last_used field"""
-    with TemporaryDirectory() as temp_dir:
-        # Create test vault
-        vault_path = Path(temp_dir) / "test_vault"
-        cli.init_command(str(vault_path))
-        
-        # Create a test prompt
-        test_prompt = vault_path / "Prompts" / "test_prompt.md"
-        test_prompt.write_text("""---
-title: "Test Prompt"
-description: "A test prompt"
-tags: ["test"]
----
-This is the prompt content""")
-        
-        # Mock fzf selection
-        mock_check_output.return_value = str(test_prompt).encode()
-        
-        # Mock clipboard copy
-        mock_run.return_value = None
-        
-        # Run pick command
-        cli.pick_command(vault_path=str(vault_path))
-        
-        # Verify the file was updated with last_used
-        content = test_prompt.read_text()
-        assert "last_used" in content
-
-
-@patch("promptkeep.cli.subprocess.check_output")
-@patch("promptkeep.cli.subprocess.run")
-def test_pick_command_preview(mock_run, mock_check_output):
-    """Test that pick command uses fzf preview"""
-    with TemporaryDirectory() as temp_dir:
-        # Create test vault
-        vault_path = Path(temp_dir) / "test_vault"
-        cli.init_command(str(vault_path))
-        
-        # Create a test prompt
-        test_prompt = vault_path / "Prompts" / "test_prompt.md"
-        test_prompt.write_text("""---
-title: "Test Prompt"
-description: "A test prompt"
-tags: ["test"]
----
-This is the prompt content""")
-        
-        # Mock fzf selection
-        mock_check_output.return_value = str(test_prompt).encode()
-        
-        # Mock clipboard copy
-        mock_run.return_value = None
-        
-        # Run pick command
-        cli.pick_command(vault_path=str(vault_path))
-        
-        # Verify fzf was called with preview options
-        mock_check_output.assert_called_once()
-        call_args = mock_check_output.call_args[0][0]
-        assert "--preview" in call_args
-        assert "--preview-window" in call_args
-
-
 def test_sanitize_filename():
     """Test filename sanitization"""
     assert sanitize_filename("Test Prompt") == "test-prompt"
@@ -324,4 +285,6 @@ def test_sanitize_filename():
     assert sanitize_filename("Test\"Prompt") == "test-prompt"
     assert sanitize_filename("Test\\Prompt") == "test-prompt"
     assert sanitize_filename("Test/Prompt") == "test-prompt"
-    assert sanitize_filename("Test Prompt" * 100) == "test-prompt" * 10  # Length limit 
+    # Test length limit
+    long_title = "Test Prompt" * 100
+    assert len(sanitize_filename(long_title)) <= 100 

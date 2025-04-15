@@ -1,5 +1,9 @@
 """
-Main CLI module for PromptKeep
+Main CLI module for PromptKeep.
+
+This module implements the command-line interface for PromptKeep, providing commands
+for initializing a prompt vault, adding new prompts, and selecting existing prompts.
+It uses Typer for CLI argument parsing and Rich for terminal output formatting.
 """
 import os
 import shutil
@@ -12,24 +16,31 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
-import yaml
 
 from promptkeep.utils import (
     copy_to_clipboard,
     extract_prompt_content,
-    get_default_vault_path,
     open_editor,
     sanitize_filename,
     validate_vault_path,
 )
 
-# Create the app with a callback
+# Initialize the Typer app with a help message
 app = typer.Typer(help="PromptKeep - A CLI tool for managing and accessing your AI prompts")
 console = Console()
 
 
 def create_prompt_template(prompts_dir: Path) -> None:
-    """Create a template prompt file to show users the format"""
+    """Create an example prompt file to demonstrate the expected format.
+    
+    This function creates a template file that shows users:
+    - The required YAML front matter structure
+    - How to format metadata (title, description, tags)
+    - Where to place the actual prompt content
+    
+    Args:
+        prompts_dir: Directory where the template should be created
+    """
     template_content = """---
 title: "Example Prompt"
 description: "A template showing the prompt format"
@@ -52,30 +63,23 @@ def init_command(
         "~/PromptVault",
         help="Path where your prompt vault will be created",
     ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        "-f",
-        help="Force creation even if directory exists",
-    ),
 ) -> None:
-    """Initialize a new prompt vault"""
+    """Initialize a new prompt vault.
+    
+    This command creates a directory structure for storing prompts:
+    - Creates the main vault directory
+    - Creates a 'Prompts' subdirectory
+    - Adds an example prompt template
+    
+    If the directory already exists, it will be overwritten.
+    
+    Args:
+        vault_path: Path where the vault should be created (defaults to ~/PromptVault)
+    """
     # Expand user directory (~) and make path absolute
     expanded_path = Path(vault_path).expanduser().absolute()
     
-    # Check if directory exists
-    if expanded_path.exists() and not force:
-        console.print(
-            Panel.fit(
-                f"[red]Error: Directory {expanded_path} already exists.[/]\n"
-                "Use --force to overwrite existing directory.",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1)
-
-    # Create the vault directory
+    # Create the vault directory with progress indicator
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -83,8 +87,8 @@ def init_command(
     ) as progress:
         progress.add_task(description="Creating prompt vault...", total=None)
         
-        # Remove existing directory if force is True
-        if expanded_path.exists() and force:
+        # Remove existing directory if it exists
+        if expanded_path.exists():
             shutil.rmtree(expanded_path)
         
         # Create the vault directory and prompts subdirectory
@@ -95,7 +99,7 @@ def init_command(
         # Create template prompt
         create_prompt_template(prompts_dir)
 
-    # Show success message
+    # Show success message with next steps
     console.print(
         Panel.fit(
             f"✅ Prompt vault created successfully at: [bold blue]{expanded_path}[/]\n\n"
@@ -135,7 +139,22 @@ def add_command(
         help="Path to the prompt vault (defaults to ~/PromptVault or PROMPTKEEP_VAULT env var)",
     ),
 ) -> None:
-    """Add a new prompt to your vault"""
+    """Add a new prompt to your vault.
+    
+    This command:
+    1. Creates a new markdown file with YAML front matter
+    2. Opens your default editor to write the prompt content
+    3. Saves the file with a unique name based on title and timestamp
+    
+    Args:
+        title: The title of the prompt
+        description: Optional description of the prompt
+        tags: Optional list of tags for categorizing the prompt
+        vault_path: Optional path to the prompt vault
+        
+    Raises:
+        typer.Exit: If no vault exists or if user cancels the operation
+    """
     # Validate vault path
     try:
         expanded_vault = validate_vault_path(vault_path)
@@ -156,14 +175,13 @@ def add_command(
     if len(tags) == 1 and "," in tags[0]:
         tags = [tag.strip() for tag in tags[0].split(",")]
 
-    # Create filename from title
+    # Create filename from title and timestamp
     filename = sanitize_filename(title)
-    # Add timestamp for uniqueness
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = f"{filename}-{timestamp}.md"
     prompt_path = prompts_dir / filename
 
-    # Check if a similar file already exists
+    # Check for existing similar prompts
     existing_files = list(prompts_dir.glob(f"{sanitize_filename(title)}-*.md"))
     if existing_files:
         console.print(
@@ -177,13 +195,12 @@ def add_command(
         if not typer.confirm("Do you want to continue?"):
             raise typer.Exit(0)
 
-    # Create the prompt template
+    # Create the prompt template with YAML front matter
     yaml_tags = ", ".join([f'"{tag.strip()}"' for tag in tags])
     prompt_content = f"""---
 title: "{title}"
 description: "{description}"
 tags: [{yaml_tags}]
-created: "{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 ---
 
 """
@@ -233,7 +250,19 @@ def pick_command(
         help="Path to the prompt vault (defaults to ~/PromptVault or PROMPTKEEP_VAULT env var)",
     ),
 ) -> None:
-    """Pick a prompt and copy its content to clipboard"""
+    """Select a prompt and copy its content to clipboard.
+    
+    This command:
+    1. Lists all available prompts in the vault
+    2. Uses fzf for interactive selection
+    3. Copies the selected prompt's content to clipboard
+    
+    Args:
+        vault_path: Optional path to the prompt vault
+        
+    Raises:
+        typer.Exit: If no prompts are found or if selection is cancelled
+    """
     # Validate vault path
     expanded_vault = validate_vault_path(vault_path)
     prompts_dir = expanded_vault / "Prompts"
@@ -249,72 +278,37 @@ def pick_command(
                 border_style="yellow",
             )
         )
-        raise typer.Exit(0)
+        raise typer.Exit(1)
 
-    # Use fzf to let user select a file with preview
+    # Use fzf to select a file
     try:
         selected_file = subprocess.check_output(
-            [
-                "fzf",
-                "--prompt", "Select a prompt: ",
-                "--preview", "cat {} | head -n 20",
-                "--preview-window", "right:60%",
-            ],
+            ["fzf", "--prompt", "Select a prompt: "],
             input="\n".join(str(f) for f in prompt_files).encode(),
         ).decode().strip()
     except subprocess.CalledProcessError:
-        # User pressed Ctrl+C or Esc
+        # User cancelled the selection
         raise typer.Exit(0)
     except FileNotFoundError:
         console.print(
             Panel.fit(
                 "[red]Error: fzf not found.[/]\n"
-                "Please install fzf to use the pick command:\n"
-                "  - macOS: brew install fzf\n"
-                "  - Linux: use your package manager",
+                "Please install fzf to use the pick command.",
                 title="Error",
                 border_style="red",
             )
         )
         raise typer.Exit(1)
 
-    if not selected_file:
-        # User didn't select anything
-        raise typer.Exit(0)
-
-    # Read the file content
-    prompt_path = Path(selected_file)
-    content = prompt_path.read_text()
-
-    # Extract the prompt content (excluding YAML front matter)
-    prompt_text = extract_prompt_content(content)
-
-    # Update the last_used field in the YAML front matter
-    try:
-        # Split the content into YAML and prompt text
-        parts = content.split("---", 2)
-        if len(parts) == 3:
-            yaml_content = parts[1].strip()
-            prompt_text = parts[2].strip()
-            
-            # Parse the YAML
-            yaml_data = yaml.safe_load(yaml_content)
-            yaml_data["last_used"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            # Reconstruct the file content
-            new_content = f"---\n{yaml.dump(yaml_data)}---\n{prompt_text}"
-            prompt_path.write_text(new_content)
-    except Exception:
-        # If YAML parsing fails, just continue without updating last_used
-        pass
+    # Read and extract the prompt content
+    content = Path(selected_file).read_text()
+    prompt_content = extract_prompt_content(content)
 
     # Copy to clipboard
-    copy_to_clipboard(prompt_text)
-
-    # Show success message
+    copy_to_clipboard(prompt_content)
     console.print(
         Panel.fit(
-            f"✅ Prompt copied to clipboard:\n\n{prompt_text[:200]}...",
+            "✅ Prompt copied to clipboard",
             title="Success",
             border_style="green",
         )
@@ -322,7 +316,7 @@ def pick_command(
 
 
 def main():
-    """Entry point for the CLI"""
+    """Entry point for the PromptKeep CLI application."""
     app()
 
 

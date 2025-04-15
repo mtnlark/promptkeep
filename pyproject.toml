@@ -1,3 +1,4 @@
+# Project metadata and dependencies
 [project]
 name = "promptkeep"
 version = "0.1.0"
@@ -5,54 +6,65 @@ description = "A CLI tool for managing and accessing your AI prompts"
 authors = [
     {name = "Lev Craig", email = "mtnlark@pm.me"}
 ]
+# Core dependencies required for the application
 dependencies = [
-    "typer>=0.9.0",
-    "pyperclip>=1.8.2",
-    "rich>=13.0.0",
-    "pyyaml>=6.0.0",
+    "typer>=0.9.0",        # CLI framework
+    "pyperclip>=1.8.2",    # Cross-platform clipboard operations
+    "rich>=13.0.0",        # Terminal formatting and styling
+    "pyyaml>=6.0.0",       # YAML front matter parsing
 ]
 requires-python = ">=3.8"
 
+# Entry point for the CLI application
 [project.scripts]
 promptkeep = "promptkeep.main:main"
 
+# Build system configuration
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# Hatch build configuration
 [tool.hatch.metadata]
 src-layout = true
 
+# Include template vault files in the package
 [tool.hatch.build]
 include = [
     "src/promptkeep/template_vault/**/*",
 ]
 
+# Wheel package configuration
 [tool.hatch.build.targets.wheel]
 packages = ["src/promptkeep"]
 
+# Typer CLI configuration
 [tool.typer]
 help = "A CLI tool for managing and accessing your AI prompts"
 
+# Development dependencies for testing and code quality
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
-    "pytest-cov>=4.0.0",
+    "pytest>=7.0.0",       # Testing framework
+    "black>=23.0.0",       # Code formatting
+    "ruff>=0.1.0",         # Fast Python linter
+    "mypy>=1.0.0",         # Static type checking
+    "pytest-cov>=4.0.0",   # Test coverage reporting
 ]
 
+# Black code formatter configuration
 [tool.black]
 line-length = 88
 target-version = ["py38"]
 
+# Ruff linter configuration
 [tool.ruff]
 line-length = 88
 target-version = "py38"
-select = ["E", "F", "B", "I", "N", "UP", "PL", "RUF"]
+select = ["E", "F", "B", "I", "N", "UP", "PL", "RUF"]  # Enable common linting rules
 ignore = []
 
+# MyPy type checker configuration
 [tool.mypy]
 python_version = "3.8"
 warn_return_any = true

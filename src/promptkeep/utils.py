@@ -1,5 +1,8 @@
 """
-Utility functions for PromptKeep
+Utility functions for PromptKeep.
+
+This module provides core utility functions used throughout the PromptKeep application,
+including file path management, clipboard operations, and text processing.
 """
 import os
 import re
@@ -15,59 +18,92 @@ console = Console()
 
 
 def sanitize_filename(title: str) -> str:
-    """Sanitize a title to create a valid filename"""
-    # Convert to lowercase
+    """Convert a title into a valid filename.
+    
+    This function handles several aspects of filename sanitization:
+    - Converts to lowercase
+    - Replaces invalid characters with hyphens
+    - Removes consecutive hyphens
+    - Trims leading/trailing hyphens
+    - Enforces a maximum length of 100 characters
+    
+    Args:
+        title: The original title to be converted into a filename
+        
+    Returns:
+        A sanitized string suitable for use as a filename
+        
+    Example:
+        >>> sanitize_filename("My Prompt: A Test?")
+        'my-prompt-a-test'
+    """
+    # Convert to lowercase for consistency
     title = title.lower()
     
-    # Replace invalid characters with hyphens
+    # Replace invalid filesystem characters with hyphens
+    # This includes: < > : " / \ | ? *
     invalid_chars = r'[<>:"/\\|?*]'
     sanitized = re.sub(invalid_chars, '-', title)
     
-    # Replace spaces with hyphens
+    # Replace spaces with hyphens for better readability
     sanitized = sanitized.replace(' ', '-')
     
-    # Remove consecutive hyphens
+    # Remove consecutive hyphens to avoid messy filenames
     sanitized = re.sub(r'-+', '-', sanitized)
     
-    # Remove leading/trailing hyphens
+    # Remove leading/trailing hyphens that might cause issues
     sanitized = sanitized.strip('-')
     
-    # For the special case of repeated "Test Prompt", return exactly 10 repetitions of "test-prompt"
-    if sanitized == "test-prompt" * 100:
-        return "test-prompt" * 10
-    
-    # For all other cases, limit length to 100 characters
+    # Enforce maximum filename length to prevent filesystem issues
     if len(sanitized) > 100:
         sanitized = sanitized[:100]
     
     return sanitized
 
 
-def get_default_vault_path() -> Path:
-    """Get the default vault path"""
-    return Path("~/PromptVault").expanduser().absolute()
-
-
 def find_vault_path() -> Optional[Path]:
-    """Find the vault path by checking common locations"""
-    # First, check environment variable
+    """Locate the prompt vault by checking common locations.
+    
+    This function searches for the vault in the following order:
+    1. Path specified in PROMPTKEEP_VAULT environment variable
+    2. Default location (~/PromptVault)
+    
+    Returns:
+        Path to the vault if found, None otherwise
+    """
+    # First, check environment variable for custom vault location
     env_path = os.environ.get("PROMPTKEEP_VAULT")
     if env_path:
         path = Path(env_path).expanduser().absolute()
         if path.exists() and (path / "Prompts").exists():
             return path
 
-    # Check default location
-    default_path = get_default_vault_path()
+    # Check default location if environment variable not set or invalid
+    default_path = Path("~/PromptVault").expanduser().absolute()
     if default_path.exists() and (default_path / "Prompts").exists():
         return default_path
 
-    # No vault found
+    # No valid vault found
     return None
 
 
 def validate_vault_path(vault_path: Optional[str]) -> Path:
-    """Validate and return the vault path"""
+    """Validate the existence and structure of a prompt vault.
+    
+    This function ensures that:
+    1. The vault directory exists
+    2. It contains a 'Prompts' subdirectory
+    3. The path is absolute and expanded
+    
+    Args:
+        vault_path: Optional path to the vault. If None, attempts to find it.
+        
+    Returns:
+        Validated absolute Path to the vault
+        
+    Raises:
+        typer.Exit: If the vault is not found or is invalid
+    """
     if vault_path:
         expanded_vault = Path(vault_path).expanduser().absolute()
     else:
@@ -100,43 +136,50 @@ def validate_vault_path(vault_path: Optional[str]) -> Path:
 
 
 def copy_to_clipboard(text: str) -> None:
-    """Copy text to clipboard using platform-specific commands or pyperclip as fallback"""
-    platform = os.sys.platform
-    try:
-        if platform == "darwin":  # macOS
-            subprocess.run(["pbcopy"], input=text.encode(), check=True)
-        elif platform == "linux":
-            subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=True)
-        elif platform == "win32":
-            subprocess.run(["clip"], input=text.encode(), check=True)
-        else:
-            # Fallback to pyperclip
-            pyperclip.copy(text)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        # Fallback to pyperclip if platform-specific command fails
-        pyperclip.copy(text)
+    """Copy text to the system clipboard.
+    
+    Args:
+        text: The text to copy to the clipboard
+    """
+    pyperclip.copy(text)
 
 
 def extract_prompt_content(content: str) -> str:
-    """Extract the prompt content from a markdown file, removing YAML frontmatter"""
-    # Split on the first two '---' markers to remove YAML frontmatter
+    """Extract the prompt content from a markdown file, excluding YAML front matter.
+    
+    Args:
+        content: The full content of the markdown file
+        
+    Returns:
+        The prompt content without the YAML front matter
+    """
+    # Split the content into YAML and prompt text
     parts = content.split("---", 2)
-    if len(parts) > 2:
+    if len(parts) == 3:
         return parts[2].strip()
     return content.strip()
 
 
 def open_editor(file_path: Path) -> bool:
-    """Open the user's preferred editor to edit the file"""
+    """Open the user's default editor to edit a file.
+    
+    Args:
+        file_path: Path to the file to edit
+        
+    Returns:
+        True if the editor was opened successfully, False otherwise
+    """
     editor = os.environ.get("EDITOR", "vim")
     try:
         subprocess.run([editor, str(file_path)], check=True)
         return True
     except subprocess.CalledProcessError:
+        return False
+    except FileNotFoundError:
         console.print(
             Panel.fit(
-                f"[red]Error: Failed to open editor '{editor}'[/]\n"
-                "Set the EDITOR environment variable to your preferred editor.",
+                f"[red]Error: Editor '{editor}' not found.[/]\n"
+                "Please set the EDITOR environment variable to your preferred editor.",
                 title="Error",
                 border_style="red",
             )
