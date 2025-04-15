@@ -283,7 +283,29 @@ def pick_command(
     # Use fzf to select a file
     try:
         selected_file = subprocess.check_output(
-            ["fzf", "--prompt", "Select a prompt: "],
+            [
+                "fzf",
+                "--prompt", "Select a prompt: ",
+                "--preview", """awk '
+                    BEGIN { in_yaml=0; printed_header=0 }
+                    /^---$/ { in_yaml = !in_yaml; next }
+                    in_yaml {
+                        if ($1 == "title:") title = substr($0, 8)
+                        if ($1 == "tags:") { tags=1; next }
+                        if (tags && $1 == "-") tag_list = tag_list ", " substr($0, 3)
+                    }
+                    !in_yaml && !printed_header {
+                        gsub(/"/, "", title)
+                        sub(/, /, "", tag_list)
+                        print "Title: " title
+                        if (tag_list) print "Tags:  " tag_list
+                        print "----------------------------------------"
+                        printed_header=1
+                        next
+                    }
+                    !in_yaml { print }
+                ' {}"""
+            ],
             input="\n".join(str(f) for f in prompt_files).encode(),
         ).decode().strip()
     except subprocess.CalledProcessError:
