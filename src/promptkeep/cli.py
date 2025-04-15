@@ -249,6 +249,11 @@ def pick_command(
         "--vault", "-v",
         help="Path to the prompt vault (defaults to ~/PromptVault or PROMPTKEEP_VAULT env var)",
     ),
+    tags: Optional[List[str]] = typer.Option(
+        None,
+        "--tag", "-t",
+        help="Filter prompts by tag (can be specified multiple times)",
+    ),
 ) -> None:
     """Select a prompt and copy its content to clipboard.
     
@@ -261,11 +266,17 @@ def pick_command(
     3. Uses fzf for fuzzy finding and selection
     4. Copies the selected prompt's content to clipboard
     
-    The preview window helps you quickly identify the right prompt
-    by showing both metadata and content before selection.
+    You can filter prompts by tags using the --tag option. Multiple tags
+    can be specified, and only prompts containing ALL specified tags will
+    be shown.
+    
+    Examples:
+        promptkeep pick
+        promptkeep pick --tag job-search --tag cover-letter
     
     Args:
         vault_path: Optional path to the prompt vault
+        tags: Optional list of tags to filter prompts by
         
     Raises:
         typer.Exit: If no prompts are found, if selection is cancelled,
@@ -287,6 +298,44 @@ def pick_command(
             )
         )
         raise typer.Exit(1)
+
+    # Filter prompts by tags if specified
+    if tags:
+        filtered_files = []
+        for file in prompt_files:
+            content = file.read_text()
+            file_tags = []
+            in_yaml = False
+            for line in content.splitlines():
+                if line.strip() == "---":
+                    in_yaml = not in_yaml
+                    continue
+                if in_yaml:
+                    # Handle inline array format: tags: ["tag1", "tag2"]
+                    if line.strip().startswith("tags:"):
+                        tags_str = line.split("tags:", 1)[1].strip()
+                        if tags_str.startswith("["):
+                            # Remove brackets and split by comma
+                            tags_str = tags_str.strip("[]")
+                            file_tags.extend(tag.strip().strip('"\'') for tag in tags_str.split(","))
+                        # Handle block format: - tag1
+                        elif line.strip().startswith("- "):
+                            tag = line.strip()[2:].strip().strip('"\'')
+                            file_tags.append(tag)
+                if all(tag in file_tags for tag in tags):
+                    filtered_files.append(file)
+        prompt_files = filtered_files
+        
+        if not prompt_files:
+            tag_list = ", ".join(f"'{tag}'" for tag in tags)
+            console.print(
+                Panel.fit(
+                    f"[yellow]No prompts found with tags: {tag_list}[/]",
+                    title="Warning",
+                    border_style="yellow",
+                )
+            )
+            raise typer.Exit(1)
 
     # Use fzf to select a file with enhanced preview showing title, tags, and content
     try:

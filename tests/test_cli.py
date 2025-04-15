@@ -229,11 +229,20 @@ This is the prompt content""")
         # Mock fzf selection
         mock_check_output.return_value = str(test_prompt).encode()
         
-        # Run pick command
-        cli.pick_command(vault_path=str(vault_path))
-        
-        # Verify clipboard copy was called with correct content
+        # Test without tags
+        cli.pick_command(vault_path=str(vault_path), tags=None)
         mock_copy.assert_called_once_with("This is the prompt content")
+        mock_copy.reset_mock()
+        
+        # Test with matching tag
+        cli.pick_command(vault_path=str(vault_path), tags=["test"])
+        mock_copy.assert_called_once_with("This is the prompt content")
+        mock_copy.reset_mock()
+        
+        # Test with non-matching tag
+        with pytest.raises(typer.Exit) as exc_info:
+            cli.pick_command(vault_path=str(vault_path), tags=["nonexistent"])
+        assert exc_info.value.exit_code == 1
 
 
 @patch("promptkeep.cli.subprocess.check_output")
@@ -249,7 +258,7 @@ def test_pick_command_no_prompts(mock_check_output):
         
         # Run pick command
         with pytest.raises(typer.Exit) as exc_info:
-            cli.pick_command(vault_path=str(vault_path))
+            cli.pick_command(vault_path=str(vault_path), tags=None)
         
         assert exc_info.value.exit_code == 1  # Should exit with error
 
@@ -267,7 +276,7 @@ def test_pick_command_fzf_not_found(mock_check_output):
         
         # Run pick command
         with pytest.raises(typer.Exit) as exc_info:
-            cli.pick_command(vault_path=str(vault_path))
+            cli.pick_command(vault_path=str(vault_path), tags=None)
         
         assert exc_info.value.exit_code == 1  # Should exit with error
 
