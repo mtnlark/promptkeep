@@ -4,16 +4,23 @@ Main CLI module for PromptKeep
 import os
 import shutil
 import subprocess
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
-import sys
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
+
+from promptkeep.utils import (
+    copy_to_clipboard,
+    extract_prompt_content,
+    get_default_vault_path,
+    open_editor,
+    sanitize_filename,
+    validate_vault_path,
+)
 
 # Create the app with a callback
 app = typer.Typer(help="PromptKeep - A CLI tool for managing and accessing your AI prompts")
@@ -36,46 +43,6 @@ modify the YAML front matter and prompt content as needed.
 """
     template_path = prompts_dir / "example_prompt.md"
     template_path.write_text(template_content)
-
-
-def get_default_vault_path() -> Path:
-    """Get the default vault path"""
-    return Path("~/PromptVault").expanduser().absolute()
-
-
-def find_vault_path() -> Optional[Path]:
-    """Find the vault path by checking common locations"""
-    # First, check environment variable
-    env_path = os.environ.get("PROMPTKEEP_VAULT")
-    if env_path:
-        path = Path(env_path).expanduser().absolute()
-        if path.exists() and (path / "Prompts").exists():
-            return path
-
-    # Check default location
-    default_path = get_default_vault_path()
-    if default_path.exists() and (default_path / "Prompts").exists():
-        return default_path
-
-    # No vault found
-    return None
-
-
-def open_editor(file_path: Path) -> None:
-    """Open the user's preferred editor to edit the file"""
-    editor = os.environ.get("EDITOR", "vim")
-    try:
-        subprocess.run([editor, str(file_path)], check=True)
-    except subprocess.CalledProcessError:
-        console.print(
-            Panel.fit(
-                f"[red]Error: Failed to open editor '{editor}'[/]\n"
-                "Set the EDITOR environment variable to your preferred editor.",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1)
 
 
 @app.command("init")
@@ -168,41 +135,16 @@ def add_command(
     ),
 ) -> None:
     """Add a new prompt to your vault"""
-    # Find the vault path
-    if vault_path:
-        expanded_vault = Path(vault_path).expanduser().absolute()
-    else:
-        expanded_vault = find_vault_path()
-
-    if not expanded_vault:
-        console.print(
-            Panel.fit(
-                "[red]Error: No vault found.[/]\n"
-                "Use 'promptkeep init' to create a vault or specify a vault path with --vault.",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1)
-
+    # Validate vault path
+    expanded_vault = validate_vault_path(vault_path)
     prompts_dir = expanded_vault / "Prompts"
-    if not prompts_dir.exists() or not prompts_dir.is_dir():
-        console.print(
-            Panel.fit(
-                f"[red]Error: Prompts directory not found in {expanded_vault}.[/]\n"
-                "Make sure this is a valid prompt vault.",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1)
 
     # Process comma-separated tags if provided as a single string
     if len(tags) == 1 and "," in tags[0]:
         tags = [tag.strip() for tag in tags[0].split(",")]
 
     # Create filename from title
-    filename = title.lower().replace(" ", "-")
+    filename = sanitize_filename(title.lower().replace(" ", "-"))
     # Add timestamp for uniqueness
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = f"{filename}-{timestamp}.md"
@@ -231,7 +173,11 @@ created: "{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             border_style="blue",
         )
     )
-    open_editor(prompt_path)
+    
+    if not open_editor(prompt_path):
+        # If editor failed to open, remove the file
+        prompt_path.unlink()
+        raise typer.Exit(1)
 
     # Check if file still exists (user might have deleted it)
     if prompt_path.exists():
@@ -252,28 +198,6 @@ created: "{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
 
-def extract_prompt_content(content: str) -> str:
-    """Extract the prompt content from a markdown file, removing YAML frontmatter"""
-    # Split on the first two '---' markers to remove YAML frontmatter
-    parts = content.split("---", 2)
-    if len(parts) > 2:
-        return parts[2].strip()
-    return content.strip()
-
-
-def copy_to_clipboard(text: str) -> None:
-    """Copy text to clipboard using platform-specific commands"""
-    platform = sys.platform
-    if platform == "darwin":  # macOS
-        subprocess.run(["pbcopy"], input=text.encode(), check=True)
-    elif platform == "linux":
-        subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=True)
-    elif platform == "win32":
-        subprocess.run(["clip"], input=text.encode(), check=True)
-    else:
-        raise RuntimeError(f"Unsupported platform: {platform}")
-
-
 @app.command("pick")
 def pick_command(
     vault_path: Optional[str] = typer.Option(
@@ -283,34 +207,9 @@ def pick_command(
     ),
 ) -> None:
     """Pick a prompt and copy its content to clipboard"""
-    # Find the vault path
-    if vault_path:
-        expanded_vault = Path(vault_path).expanduser().absolute()
-    else:
-        expanded_vault = find_vault_path()
-
-    if not expanded_vault:
-        console.print(
-            Panel.fit(
-                "[red]Error: No vault found.[/]\n"
-                "Use 'promptkeep init' to create a vault or specify a vault path with --vault.",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1)
-
+    # Validate vault path
+    expanded_vault = validate_vault_path(vault_path)
     prompts_dir = expanded_vault / "Prompts"
-    if not prompts_dir.exists() or not prompts_dir.is_dir():
-        console.print(
-            Panel.fit(
-                f"[red]Error: Prompts directory not found in {expanded_vault}.[/]\n"
-                "Make sure this is a valid prompt vault.",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1)
 
     # Get all markdown files
     prompt_files = list(prompts_dir.glob("*.md"))

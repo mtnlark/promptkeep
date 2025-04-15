@@ -6,12 +6,21 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import pytest
-from promptkeep import cli
 import typer
+from promptkeep import cli
+from promptkeep.utils import (
+    copy_to_clipboard,
+    extract_prompt_content,
+    find_vault_path,
+    open_editor,
+    sanitize_filename,
+)
+
 
 def test_app_exists():
     """Test that the Typer app exists"""
     assert cli.app is not None
+
 
 def test_init_creates_vault():
     """Test that init command creates the vault structure"""
@@ -29,6 +38,7 @@ def test_init_creates_vault():
         template_content = (vault_path / "Prompts" / "example_prompt.md").read_text()
         assert "---" in template_content
         assert "title: \"Example Prompt\"" in template_content
+
 
 def test_init_force_overwrites():
     """Test that init --force overwrites existing directory"""
@@ -49,6 +59,7 @@ def test_init_force_overwrites():
         # But template still exists
         assert (vault_path / "Prompts" / "example_prompt.md").exists()
 
+
 def test_find_vault_path():
     """Test finding the vault path"""
     with TemporaryDirectory() as temp_dir:
@@ -57,13 +68,14 @@ def test_find_vault_path():
         cli.init_command(str(vault_path))
         
         # Test with explicit path
-        assert cli.find_vault_path() is None  # Default path doesn't exist
+        assert find_vault_path() is None  # Default path doesn't exist
         
         # Test with environment variable
         with patch.dict(os.environ, {"PROMPTKEEP_VAULT": str(vault_path)}):
-            found_path = cli.find_vault_path()
+            found_path = find_vault_path()
             assert found_path is not None
             assert found_path == vault_path
+
 
 @patch("promptkeep.cli.open_editor")
 def test_add_command(mock_open_editor):
@@ -74,7 +86,7 @@ def test_add_command(mock_open_editor):
         cli.init_command(str(vault_path))
         
         # Mock the editor so it doesn't actually open
-        mock_open_editor.return_value = None
+        mock_open_editor.return_value = True
         
         # Run add command
         cli.add_command(
@@ -101,7 +113,35 @@ def test_add_command(mock_open_editor):
         content = new_prompt_file.read_text()
         assert "title: \"Test Prompt\"" in content
         assert "description: \"A test prompt\"" in content
-        assert "\"test\", \"example\"" in content  # Tags 
+        assert "\"test\", \"example\"" in content  # Tags
+
+
+@patch("promptkeep.cli.open_editor")
+def test_add_command_editor_failure(mock_open_editor):
+    """Test that add command handles editor failure"""
+    with TemporaryDirectory() as temp_dir:
+        # Create test vault
+        vault_path = Path(temp_dir) / "test_vault"
+        cli.init_command(str(vault_path))
+        
+        # Mock the editor to fail
+        mock_open_editor.return_value = False
+        
+        # Run add command
+        with pytest.raises(typer.Exit) as exc_info:
+            cli.add_command(
+                title="Test Prompt",
+                description="A test prompt",
+                tags=["test", "example"],
+                vault_path=str(vault_path)
+            )
+        
+        assert exc_info.value.exit_code == 1
+        
+        # Check that no new prompt file was created
+        prompt_files = list(Path(vault_path / "Prompts").glob("*.md"))
+        assert len(prompt_files) == 1  # Only the example prompt
+
 
 @patch("promptkeep.cli.subprocess.check_output")
 @patch("promptkeep.cli.subprocess.run")
@@ -132,9 +172,9 @@ This is the prompt content""")
         
         # Verify clipboard copy was called with correct content
         mock_run.assert_called_once()
-        # We're on macOS, so pbcopy should be used
         assert mock_run.call_args[0][0] == ["pbcopy"]
         assert mock_run.call_args[1]["input"] == b"This is the prompt content"
+
 
 @patch("promptkeep.cli.subprocess.check_output")
 def test_pick_command_no_prompts(mock_check_output):
@@ -153,6 +193,7 @@ def test_pick_command_no_prompts(mock_check_output):
         
         assert exc_info.value.exit_code == 0  # Should exit with 0 (warning)
 
+
 @patch("promptkeep.cli.subprocess.check_output")
 def test_pick_command_fzf_not_found(mock_check_output):
     """Test pick command when fzf is not installed"""
@@ -168,4 +209,20 @@ def test_pick_command_fzf_not_found(mock_check_output):
         with pytest.raises(typer.Exit) as exc_info:
             cli.pick_command(vault_path=str(vault_path))
         
-        assert exc_info.value.exit_code == 1  # Should exit with error 
+        assert exc_info.value.exit_code == 1  # Should exit with error
+
+
+def test_sanitize_filename():
+    """Test filename sanitization"""
+    assert sanitize_filename("Test Prompt") == "test-prompt"
+    assert sanitize_filename("Test/Prompt") == "test-prompt"
+    assert sanitize_filename("Test:Prompt") == "test-prompt"
+    assert sanitize_filename("Test*Prompt") == "test-prompt"
+    assert sanitize_filename("Test?Prompt") == "test-prompt"
+    assert sanitize_filename("Test<Prompt") == "test-prompt"
+    assert sanitize_filename("Test>Prompt") == "test-prompt"
+    assert sanitize_filename("Test|Prompt") == "test-prompt"
+    assert sanitize_filename("Test\"Prompt") == "test-prompt"
+    assert sanitize_filename("Test\\Prompt") == "test-prompt"
+    assert sanitize_filename("Test/Prompt") == "test-prompt"
+    assert sanitize_filename("Test Prompt" * 100) == "test-prompt" * 10  # Length limit 
