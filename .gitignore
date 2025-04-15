@@ -50,6 +50,7 @@ htmlcov/
 # Local development
 .env
 .env.local
+.envrc
 .promptkeep/
 
 # Personal notes and planning
