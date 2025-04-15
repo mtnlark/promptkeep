@@ -12,6 +12,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
+import yaml
 
 from promptkeep.utils import (
     copy_to_clipboard,
@@ -136,7 +137,19 @@ def add_command(
 ) -> None:
     """Add a new prompt to your vault"""
     # Validate vault path
-    expanded_vault = validate_vault_path(vault_path)
+    try:
+        expanded_vault = validate_vault_path(vault_path)
+    except typer.Exit:
+        console.print(
+            Panel.fit(
+                "[yellow]No vault found. Would you like to create one?[/]\n"
+                "Run 'promptkeep init' to create a new vault.",
+                title="Warning",
+                border_style="yellow",
+            )
+        )
+        raise typer.Exit(1)
+        
     prompts_dir = expanded_vault / "Prompts"
 
     # Process comma-separated tags if provided as a single string
@@ -144,14 +157,28 @@ def add_command(
         tags = [tag.strip() for tag in tags[0].split(",")]
 
     # Create filename from title
-    filename = sanitize_filename(title.lower().replace(" ", "-"))
+    filename = sanitize_filename(title)
     # Add timestamp for uniqueness
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = f"{filename}-{timestamp}.md"
     prompt_path = prompts_dir / filename
 
+    # Check if a similar file already exists
+    existing_files = list(prompts_dir.glob(f"{sanitize_filename(title)}-*.md"))
+    if existing_files:
+        console.print(
+            Panel.fit(
+                f"[yellow]Warning: Similar prompts already exist:[/]\n"
+                f"{chr(10).join(f'- {f.name}' for f in existing_files)}",
+                title="Warning",
+                border_style="yellow",
+            )
+        )
+        if not typer.confirm("Do you want to continue?"):
+            raise typer.Exit(0)
+
     # Create the prompt template
-    yaml_tags = ", ".join([f'"{tag}"' for tag in tags])
+    yaml_tags = ", ".join([f'"{tag.strip()}"' for tag in tags])
     prompt_content = f"""---
 title: "{title}"
 description: "{description}"
@@ -224,10 +251,15 @@ def pick_command(
         )
         raise typer.Exit(0)
 
-    # Use fzf to let user select a file
+    # Use fzf to let user select a file with preview
     try:
         selected_file = subprocess.check_output(
-            ["fzf", "--prompt", "Select a prompt: "],
+            [
+                "fzf",
+                "--prompt", "Select a prompt: ",
+                "--preview", "cat {} | head -n 20",
+                "--preview-window", "right:60%",
+            ],
             input="\n".join(str(f) for f in prompt_files).encode(),
         ).decode().strip()
     except subprocess.CalledProcessError:
@@ -250,27 +282,43 @@ def pick_command(
         # User didn't select anything
         raise typer.Exit(0)
 
-    # Read and process the selected file
+    # Read the file content
+    prompt_path = Path(selected_file)
+    content = prompt_path.read_text()
+
+    # Extract the prompt content (excluding YAML front matter)
+    prompt_text = extract_prompt_content(content)
+
+    # Update the last_used field in the YAML front matter
     try:
-        content = Path(selected_file).read_text()
-        prompt_content = extract_prompt_content(content)
-        copy_to_clipboard(prompt_content)
-        console.print(
-            Panel.fit(
-                "✅ Prompt copied to clipboard!",
-                title="Success",
-                border_style="green",
-            )
+        # Split the content into YAML and prompt text
+        parts = content.split("---", 2)
+        if len(parts) == 3:
+            yaml_content = parts[1].strip()
+            prompt_text = parts[2].strip()
+            
+            # Parse the YAML
+            yaml_data = yaml.safe_load(yaml_content)
+            yaml_data["last_used"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Reconstruct the file content
+            new_content = f"---\n{yaml.dump(yaml_data)}---\n{prompt_text}"
+            prompt_path.write_text(new_content)
+    except Exception:
+        # If YAML parsing fails, just continue without updating last_used
+        pass
+
+    # Copy to clipboard
+    copy_to_clipboard(prompt_text)
+
+    # Show success message
+    console.print(
+        Panel.fit(
+            f"✅ Prompt copied to clipboard:\n\n{prompt_text[:200]}...",
+            title="Success",
+            border_style="green",
         )
-    except Exception as e:
-        console.print(
-            Panel.fit(
-                f"[red]Error: Failed to process prompt: {str(e)}[/]",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1)
+    )
 
 
 def main():

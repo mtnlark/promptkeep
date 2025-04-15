@@ -143,6 +143,39 @@ def test_add_command_editor_failure(mock_open_editor):
         assert len(prompt_files) == 1  # Only the example prompt
 
 
+@patch("promptkeep.cli.open_editor")
+def test_add_command_duplicate_warning(mock_open_editor):
+    """Test that add command warns about duplicate prompts"""
+    with TemporaryDirectory() as temp_dir:
+        # Create test vault
+        vault_path = Path(temp_dir) / "test_vault"
+        cli.init_command(str(vault_path))
+        
+        # Mock the editor so it doesn't actually open
+        mock_open_editor.return_value = True
+        
+        # Create a prompt with the same title
+        cli.add_command(
+            title="Test Prompt",
+            description="A test prompt",
+            tags=["test", "example"],
+            vault_path=str(vault_path)
+        )
+        
+        # Try to create another prompt with the same title
+        with patch("promptkeep.cli.typer.confirm") as mock_confirm:
+            mock_confirm.return_value = True
+            cli.add_command(
+                title="Test Prompt",
+                description="Another test prompt",
+                tags=["test"],
+                vault_path=str(vault_path)
+            )
+            
+            # Verify that confirm was called
+            mock_confirm.assert_called_once()
+
+
 @patch("promptkeep.cli.subprocess.check_output")
 @patch("promptkeep.cli.subprocess.run")
 def test_pick_command(mock_run, mock_check_output):
@@ -210,6 +243,72 @@ def test_pick_command_fzf_not_found(mock_check_output):
             cli.pick_command(vault_path=str(vault_path))
         
         assert exc_info.value.exit_code == 1  # Should exit with error
+
+
+@patch("promptkeep.cli.subprocess.check_output")
+@patch("promptkeep.cli.subprocess.run")
+def test_pick_command_updates_last_used(mock_run, mock_check_output):
+    """Test that pick command updates the last_used field"""
+    with TemporaryDirectory() as temp_dir:
+        # Create test vault
+        vault_path = Path(temp_dir) / "test_vault"
+        cli.init_command(str(vault_path))
+        
+        # Create a test prompt
+        test_prompt = vault_path / "Prompts" / "test_prompt.md"
+        test_prompt.write_text("""---
+title: "Test Prompt"
+description: "A test prompt"
+tags: ["test"]
+---
+This is the prompt content""")
+        
+        # Mock fzf selection
+        mock_check_output.return_value = str(test_prompt).encode()
+        
+        # Mock clipboard copy
+        mock_run.return_value = None
+        
+        # Run pick command
+        cli.pick_command(vault_path=str(vault_path))
+        
+        # Verify the file was updated with last_used
+        content = test_prompt.read_text()
+        assert "last_used" in content
+
+
+@patch("promptkeep.cli.subprocess.check_output")
+@patch("promptkeep.cli.subprocess.run")
+def test_pick_command_preview(mock_run, mock_check_output):
+    """Test that pick command uses fzf preview"""
+    with TemporaryDirectory() as temp_dir:
+        # Create test vault
+        vault_path = Path(temp_dir) / "test_vault"
+        cli.init_command(str(vault_path))
+        
+        # Create a test prompt
+        test_prompt = vault_path / "Prompts" / "test_prompt.md"
+        test_prompt.write_text("""---
+title: "Test Prompt"
+description: "A test prompt"
+tags: ["test"]
+---
+This is the prompt content""")
+        
+        # Mock fzf selection
+        mock_check_output.return_value = str(test_prompt).encode()
+        
+        # Mock clipboard copy
+        mock_run.return_value = None
+        
+        # Run pick command
+        cli.pick_command(vault_path=str(vault_path))
+        
+        # Verify fzf was called with preview options
+        mock_check_output.assert_called_once()
+        call_args = mock_check_output.call_args[0][0]
+        assert "--preview" in call_args
+        assert "--preview-window" in call_args
 
 
 def test_sanitize_filename():
