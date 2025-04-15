@@ -12,6 +12,9 @@ dependencies = [
 ]
 requires-python = ">=3.8"
 
+[project.scripts]
+promptkeep = "promptkeep.main:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
