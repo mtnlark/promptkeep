@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from promptkeep.cli import init_command
+from promptkeep.cli import init_command, add_command
 
 app = typer.Typer(
     help="PromptKeep - A CLI tool for managing and accessing your AI prompts",
@@ -26,9 +26,9 @@ def callback():
 
 # Add commands
 app.command(name="init")(init_command)
+app.command(name="add")(add_command)
 
 # Add more commands here as they are implemented
-# app.command(name="add")(add_command)
 # app.command(name="pick")(pick_command)
 
 

@@ -3,8 +3,11 @@ Main CLI module for PromptKeep
 """
 import os
 import shutil
+import subprocess
+import tempfile
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import typer
 from rich.console import Console
@@ -32,6 +35,46 @@ modify the YAML front matter and prompt content as needed.
 """
     template_path = prompts_dir / "example_prompt.md"
     template_path.write_text(template_content)
+
+
+def get_default_vault_path() -> Path:
+    """Get the default vault path"""
+    return Path("~/PromptVault").expanduser().absolute()
+
+
+def find_vault_path() -> Optional[Path]:
+    """Find the vault path by checking common locations"""
+    # First, check environment variable
+    env_path = os.environ.get("PROMPTKEEP_VAULT")
+    if env_path:
+        path = Path(env_path).expanduser().absolute()
+        if path.exists() and (path / "Prompts").exists():
+            return path
+
+    # Check default location
+    default_path = get_default_vault_path()
+    if default_path.exists() and (default_path / "Prompts").exists():
+        return default_path
+
+    # No vault found
+    return None
+
+
+def open_editor(file_path: Path) -> None:
+    """Open the user's preferred editor to edit the file"""
+    editor = os.environ.get("EDITOR", "vim")
+    try:
+        subprocess.run([editor, str(file_path)], check=True)
+    except subprocess.CalledProcessError:
+        console.print(
+            Panel.fit(
+                f"[red]Error: Failed to open editor '{editor}'[/]\n"
+                "Set the EDITOR environment variable to your preferred editor.",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
 
 
 @app.command("init")
@@ -95,6 +138,117 @@ def init_command(
             border_style="green",
         )
     )
+
+
+@app.command("add")
+def add_command(
+    title: str = typer.Option(
+        ...,
+        "--title", "-t",
+        help="Title of the prompt",
+        prompt="Enter a title for your prompt",
+    ),
+    description: str = typer.Option(
+        "",
+        "--description", "-d",
+        help="Description of the prompt",
+        prompt="Enter a description (optional)",
+    ),
+    tags: List[str] = typer.Option(
+        [],
+        "--tag",
+        help="Tags for the prompt (can be specified multiple times)",
+        prompt="Enter tags separated by commas (optional)",
+    ),
+    vault_path: Optional[str] = typer.Option(
+        None,
+        "--vault", "-v",
+        help="Path to the prompt vault (defaults to ~/PromptVault or PROMPTKEEP_VAULT env var)",
+    ),
+) -> None:
+    """Add a new prompt to your vault"""
+    # Find the vault path
+    if vault_path:
+        expanded_vault = Path(vault_path).expanduser().absolute()
+    else:
+        expanded_vault = find_vault_path()
+
+    if not expanded_vault:
+        console.print(
+            Panel.fit(
+                "[red]Error: No vault found.[/]\n"
+                "Use 'promptkeep init' to create a vault or specify a vault path with --vault.",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    prompts_dir = expanded_vault / "Prompts"
+    if not prompts_dir.exists() or not prompts_dir.is_dir():
+        console.print(
+            Panel.fit(
+                f"[red]Error: Prompts directory not found in {expanded_vault}.[/]\n"
+                "Make sure this is a valid prompt vault.",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    # Process comma-separated tags if provided as a single string
+    if len(tags) == 1 and "," in tags[0]:
+        tags = [tag.strip() for tag in tags[0].split(",")]
+
+    # Create filename from title
+    filename = title.lower().replace(" ", "-")
+    # Add timestamp for uniqueness
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"{filename}-{timestamp}.md"
+    prompt_path = prompts_dir / filename
+
+    # Create the prompt template
+    yaml_tags = ", ".join([f'"{tag}"' for tag in tags])
+    prompt_content = f"""---
+title: "{title}"
+description: "{description}"
+tags: [{yaml_tags}]
+created: "{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+---
+
+"""
+
+    # Write the template to the file
+    prompt_path.write_text(prompt_content)
+
+    # Open the editor for the user to edit the content
+    console.print(
+        Panel.fit(
+            f"Opening editor for you to write your prompt content.\n"
+            f"File will be saved at: [bold blue]{prompt_path}[/]",
+            title="Creating Prompt",
+            border_style="blue",
+        )
+    )
+    open_editor(prompt_path)
+
+    # Check if file still exists (user might have deleted it)
+    if prompt_path.exists():
+        console.print(
+            Panel.fit(
+                f"✅ Prompt created successfully at: [bold blue]{prompt_path}[/]",
+                title="Success",
+                border_style="green",
+            )
+        )
+    else:
+        console.print(
+            Panel.fit(
+                "[yellow]Note: Prompt file was not saved.[/]",
+                title="Warning",
+                border_style="yellow",
+            )
+        )
 
 
 # Add more commands here later
