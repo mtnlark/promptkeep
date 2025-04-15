@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import pyperclip
+import typer
 from rich.console import Console
 from rich.panel import Panel
 
