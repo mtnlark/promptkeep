@@ -252,16 +252,24 @@ def pick_command(
 ) -> None:
     """Select a prompt and copy its content to clipboard.
     
-    This command:
+    This command provides an interactive selection interface that:
     1. Lists all available prompts in the vault
-    2. Uses fzf for interactive selection
-    3. Copies the selected prompt's content to clipboard
+    2. Shows a preview of each prompt including:
+       - Title from YAML front matter
+       - Tags from YAML front matter
+       - Full prompt content
+    3. Uses fzf for fuzzy finding and selection
+    4. Copies the selected prompt's content to clipboard
+    
+    The preview window helps you quickly identify the right prompt
+    by showing both metadata and content before selection.
     
     Args:
         vault_path: Optional path to the prompt vault
         
     Raises:
-        typer.Exit: If no prompts are found or if selection is cancelled
+        typer.Exit: If no prompts are found, if selection is cancelled,
+                   or if fzf is not installed
     """
     # Validate vault path
     expanded_vault = validate_vault_path(vault_path)
@@ -280,7 +288,7 @@ def pick_command(
         )
         raise typer.Exit(1)
 
-    # Use fzf to select a file
+    # Use fzf to select a file with enhanced preview showing title, tags, and content
     try:
         selected_file = subprocess.check_output(
             [
