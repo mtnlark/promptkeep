@@ -8,6 +8,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
+import sys
 
 import typer
 from rich.console import Console
@@ -251,16 +252,126 @@ created: "{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
 
-# Add more commands here later
-# @app.command("add")
-# def add_command():
-#     """Add a new prompt"""
-#     pass
-#
-# @app.command("pick")
-# def pick_command():
-#     """Pick a prompt and copy it to clipboard"""
-#     pass
+def extract_prompt_content(content: str) -> str:
+    """Extract the prompt content from a markdown file, removing YAML frontmatter"""
+    # Split on the first two '---' markers to remove YAML frontmatter
+    parts = content.split("---", 2)
+    if len(parts) > 2:
+        return parts[2].strip()
+    return content.strip()
+
+
+def copy_to_clipboard(text: str) -> None:
+    """Copy text to clipboard using platform-specific commands"""
+    platform = sys.platform
+    if platform == "darwin":  # macOS
+        subprocess.run(["pbcopy"], input=text.encode(), check=True)
+    elif platform == "linux":
+        subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=True)
+    elif platform == "win32":
+        subprocess.run(["clip"], input=text.encode(), check=True)
+    else:
+        raise RuntimeError(f"Unsupported platform: {platform}")
+
+
+@app.command("pick")
+def pick_command(
+    vault_path: Optional[str] = typer.Option(
+        None,
+        "--vault", "-v",
+        help="Path to the prompt vault (defaults to ~/PromptVault or PROMPTKEEP_VAULT env var)",
+    ),
+) -> None:
+    """Pick a prompt and copy its content to clipboard"""
+    # Find the vault path
+    if vault_path:
+        expanded_vault = Path(vault_path).expanduser().absolute()
+    else:
+        expanded_vault = find_vault_path()
+
+    if not expanded_vault:
+        console.print(
+            Panel.fit(
+                "[red]Error: No vault found.[/]\n"
+                "Use 'promptkeep init' to create a vault or specify a vault path with --vault.",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    prompts_dir = expanded_vault / "Prompts"
+    if not prompts_dir.exists() or not prompts_dir.is_dir():
+        console.print(
+            Panel.fit(
+                f"[red]Error: Prompts directory not found in {expanded_vault}.[/]\n"
+                "Make sure this is a valid prompt vault.",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    # Get all markdown files
+    prompt_files = list(prompts_dir.glob("*.md"))
+    if not prompt_files:
+        console.print(
+            Panel.fit(
+                "[yellow]No prompts found in the vault.[/]\n"
+                "Use 'promptkeep add' to create a new prompt.",
+                title="Warning",
+                border_style="yellow",
+            )
+        )
+        raise typer.Exit(0)
+
+    # Use fzf to let user select a file
+    try:
+        selected_file = subprocess.check_output(
+            ["fzf", "--prompt", "Select a prompt: "],
+            input="\n".join(str(f) for f in prompt_files).encode(),
+        ).decode().strip()
+    except subprocess.CalledProcessError:
+        # User pressed Ctrl+C or Esc
+        raise typer.Exit(0)
+    except FileNotFoundError:
+        console.print(
+            Panel.fit(
+                "[red]Error: fzf not found.[/]\n"
+                "Please install fzf to use the pick command:\n"
+                "  - macOS: brew install fzf\n"
+                "  - Linux: use your package manager",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    if not selected_file:
+        # User didn't select anything
+        raise typer.Exit(0)
+
+    # Read and process the selected file
+    try:
+        content = Path(selected_file).read_text()
+        prompt_content = extract_prompt_content(content)
+        copy_to_clipboard(prompt_content)
+        console.print(
+            Panel.fit(
+                "✅ Prompt copied to clipboard!",
+                title="Success",
+                border_style="green",
+            )
+        )
+    except Exception as e:
+        console.print(
+            Panel.fit(
+                f"[red]Error: Failed to process prompt: {str(e)}[/]",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
 
 
 def main():

@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 from promptkeep import cli
+import typer
 
 def test_app_exists():
     """Test that the Typer app exists"""
@@ -101,3 +102,70 @@ def test_add_command(mock_open_editor):
         assert "title: \"Test Prompt\"" in content
         assert "description: \"A test prompt\"" in content
         assert "\"test\", \"example\"" in content  # Tags 
+
+@patch("promptkeep.cli.subprocess.check_output")
+@patch("promptkeep.cli.subprocess.run")
+def test_pick_command(mock_run, mock_check_output):
+    """Test that pick command works correctly"""
+    with TemporaryDirectory() as temp_dir:
+        # Create test vault
+        vault_path = Path(temp_dir) / "test_vault"
+        cli.init_command(str(vault_path))
+        
+        # Create a test prompt
+        test_prompt = vault_path / "Prompts" / "test_prompt.md"
+        test_prompt.write_text("""---
+title: "Test Prompt"
+description: "A test prompt"
+tags: ["test"]
+---
+This is the prompt content""")
+        
+        # Mock fzf selection
+        mock_check_output.return_value = str(test_prompt).encode()
+        
+        # Mock clipboard copy
+        mock_run.return_value = None
+        
+        # Run pick command
+        cli.pick_command(vault_path=str(vault_path))
+        
+        # Verify clipboard copy was called with correct content
+        mock_run.assert_called_once()
+        # We're on macOS, so pbcopy should be used
+        assert mock_run.call_args[0][0] == ["pbcopy"]
+        assert mock_run.call_args[1]["input"] == b"This is the prompt content"
+
+@patch("promptkeep.cli.subprocess.check_output")
+def test_pick_command_no_prompts(mock_check_output):
+    """Test pick command when no prompts exist"""
+    with TemporaryDirectory() as temp_dir:
+        # Create test vault
+        vault_path = Path(temp_dir) / "test_vault"
+        cli.init_command(str(vault_path))
+        
+        # Remove the example prompt
+        (vault_path / "Prompts" / "example_prompt.md").unlink()
+        
+        # Run pick command
+        with pytest.raises(typer.Exit) as exc_info:
+            cli.pick_command(vault_path=str(vault_path))
+        
+        assert exc_info.value.exit_code == 0  # Should exit with 0 (warning)
+
+@patch("promptkeep.cli.subprocess.check_output")
+def test_pick_command_fzf_not_found(mock_check_output):
+    """Test pick command when fzf is not installed"""
+    with TemporaryDirectory() as temp_dir:
+        # Create test vault
+        vault_path = Path(temp_dir) / "test_vault"
+        cli.init_command(str(vault_path))
+        
+        # Mock fzf not found
+        mock_check_output.side_effect = FileNotFoundError
+        
+        # Run pick command
+        with pytest.raises(typer.Exit) as exc_info:
+            cli.pick_command(vault_path=str(vault_path))
+        
+        assert exc_info.value.exit_code == 1  # Should exit with error 
