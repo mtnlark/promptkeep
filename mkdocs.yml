@@ -1,13 +1,97 @@
 site_name: PromptKeep
+site_description: A CLI tool for managing AI prompts
+site_author: Lev Craig
+repo_url: https://github.com/mtnlark/promptkeep
+repo_name: mtnlark/promptkeep
 
 theme:
   name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - search.share
+    - toc.integrate
+    - content.tabs.link
+    - content.code.annotate
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  icon:
+    repo: fontawesome/brands/github
 
 plugins:
-  - include-markdown
+  - search
+  - macros
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_root_heading: true
+            show_source: false
+  - git-revision-date-localized:
+      type: date
+      timezone: America/New_York
+      locale: en
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - footnotes
+  - meta
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.critic
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+  - attr_list
 
 nav:
   - Home: index.md
+  - Installation: installation.md
   - Usage: usage.md
   - Reference: reference.md
   - Contributing: contributing.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/mtnlark/promptkeep
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/promptkeep/
+  version:
+    provider: mike
