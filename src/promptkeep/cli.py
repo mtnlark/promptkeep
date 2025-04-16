@@ -106,7 +106,9 @@ def init_command(
             "Next steps:\n"
             "1. Add your prompts to the 'Prompts' directory\n"
             "2. Use 'promptkeep add' to create new prompts\n"
-            "3. Use 'promptkeep pick' to select and copy prompts",
+            "3. Use 'promptkeep pick' to select and copy prompts\n"
+            "4. Use 'promptkeep edit' to modify existing prompts\n"
+            "5. Use the --tag option with pick/edit to filter by tags",
             title="Success",
             border_style="green",
         )
@@ -145,6 +147,20 @@ def add_command(
     1. Creates a new markdown file with YAML front matter
     2. Opens your default editor to write the prompt content
     3. Saves the file with a unique name based on title and timestamp
+    
+    Tags can be provided either as multiple --tag options or as a comma-separated
+    list when prompted. These tags make it easier to find and filter prompts later
+    using the 'pick' and 'edit' commands.
+    
+    Usage:
+        1. Provide a title, description, and tags for your prompt
+        2. Your default text editor will open to write the prompt content
+        3. Save and exit the editor to create the prompt file
+    
+    Examples:
+        promptkeep add --title "API Documentation" --tag coding --tag docs
+        promptkeep add --title "Email Template" --description "Professional response" --vault /path/to/vault
+        promptkeep add  # Interactive prompts for all fields
     
     Args:
         title: The title of the prompt
@@ -266,13 +282,21 @@ def pick_command(
     3. Uses fzf for fuzzy finding and selection
     4. Copies the selected prompt's content to clipboard
     
-    You can filter prompts by tags using the --tag option. Multiple tags
-    can be specified, and only prompts containing ALL specified tags will
-    be shown.
+    You can filter prompts by tags using the --tag option. When multiple tags
+    are specified, only prompts containing ALL specified tags will be shown.
+    
+    Usage:
+        1. Run the command to see all prompts for selection
+        2. Use fuzzy search to filter prompts by title or content
+        3. Use arrow keys to navigate and press Enter to select
+        4. The prompt content will be automatically copied to your clipboard
+        5. Paste the content into any application (e.g., ChatGPT, email, document)
     
     Examples:
-        promptkeep pick
-        promptkeep pick --tag job-search --tag cover-letter
+        promptkeep pick                             # Select from all prompts
+        promptkeep pick --tag job-search            # Select from prompts with tag "job-search"
+        promptkeep pick --tag coding --tag python   # Select prompts with both "coding" and "python" tags
+        promptkeep pick --vault /path/to/vault      # Specify custom vault location
     
     Args:
         vault_path: Optional path to the prompt vault
@@ -388,6 +412,181 @@ def pick_command(
     console.print(
         Panel.fit(
             "✅ Prompt copied to clipboard",
+            title="Success",
+            border_style="green",
+        )
+    )
+
+
+@app.command("edit")
+def edit_command(
+    vault_path: Optional[str] = typer.Option(
+        None,
+        "--vault", "-v",
+        help="Path to the prompt vault (defaults to ~/PromptVault or PROMPTKEEP_VAULT env var)",
+    ),
+    tags: Optional[List[str]] = typer.Option(
+        None,
+        "--tag", "-t",
+        help="Filter prompts by tag (can be specified multiple times)",
+    ),
+) -> None:
+    """Edit an existing prompt in your vault.
+    
+    This command provides an interactive selection interface that:
+    1. Lists all available prompts in the vault
+    2. Shows a preview of each prompt including:
+       - Title from YAML front matter
+       - Tags from YAML front matter
+       - Full prompt content
+    3. Uses fzf for fuzzy finding and selection
+    4. Opens the selected prompt in your editor
+    
+    You can filter prompts by tags using the --tag option to quickly
+    find the prompt you want to edit. When multiple tags are specified,
+    only prompts containing ALL specified tags will be shown.
+    
+    Usage:
+        1. Run the command to see all prompts for selection
+        2. Use fuzzy search to filter prompts by title or content
+        3. Use arrow keys to navigate and press Enter to select
+        4. Edit the prompt in your default text editor
+        5. Save and exit the editor to update the prompt
+    
+    Examples:
+        promptkeep edit                             # Edit any prompt
+        promptkeep edit --tag job-search            # Edit prompts with tag "job-search"
+        promptkeep edit --tag python --tag ml       # Edit prompts with both "python" and "ml" tags
+        promptkeep edit --vault /path/to/vault      # Specify custom vault location
+    
+    Args:
+        vault_path: Optional path to the prompt vault
+        tags: Optional list of tags to filter prompts by
+        
+    Raises:
+        typer.Exit: If no prompts are found, if selection is cancelled,
+                   or if fzf is not installed
+    """
+    # Validate vault path
+    expanded_vault = validate_vault_path(vault_path)
+    prompts_dir = expanded_vault / "Prompts"
+
+    # Get all markdown files
+    prompt_files = list(prompts_dir.glob("*.md"))
+    if not prompt_files:
+        console.print(
+            Panel.fit(
+                "[yellow]No prompts found in the vault.[/]\n"
+                "Use 'promptkeep add' to create a new prompt.",
+                title="Warning",
+                border_style="yellow",
+            )
+        )
+        raise typer.Exit(1)
+
+    # Filter prompts by tags if specified
+    if tags and len(tags) > 0:
+        filtered_files = []
+        for file in prompt_files:
+            content = file.read_text()
+            file_tags = []
+            in_yaml = False
+            for line in content.splitlines():
+                if line.strip() == "---":
+                    in_yaml = not in_yaml
+                    continue
+                if in_yaml:
+                    # Handle inline array format: tags: ["tag1", "tag2"]
+                    if line.strip().startswith("tags:"):
+                        tags_str = line.split("tags:", 1)[1].strip()
+                        if tags_str.startswith("["):
+                            # Remove brackets and split by comma
+                            tags_str = tags_str.strip("[]")
+                            file_tags.extend(tag.strip().strip('"\'') for tag in tags_str.split(","))
+                    # Handle block format: - tag1
+                    elif line.strip().startswith("- "):
+                        tag = line.strip()[2:].strip().strip('"\'')
+                        file_tags.append(tag)
+            if all(tag in file_tags for tag in tags):
+                filtered_files.append(file)
+        prompt_files = filtered_files
+
+        if not prompt_files:
+            tag_list = ", ".join(f"'{tag}'" for tag in tags)
+            console.print(
+                Panel.fit(
+                    f"[yellow]No prompts found with tags: {tag_list}[/]",
+                    title="Warning",
+                    border_style="yellow",
+                )
+            )
+            raise typer.Exit(1)
+
+    # Use fzf to select a file with enhanced preview showing title, tags, and content
+    try:
+        selected_file = subprocess.check_output(
+            [
+                "fzf",
+                "--prompt", "Select a prompt to edit: ",
+                "--preview", """awk '
+                    BEGIN { in_yaml=0; printed_header=0 }
+                    /^---$/ { in_yaml = !in_yaml; next }
+                    in_yaml {
+                        if ($1 == "title:") title = substr($0, 8)
+                        if ($1 == "tags:") { tags=1; next }
+                        if (tags && $1 == "-") tag_list = tag_list ", " substr($0, 3)
+                    }
+                    !in_yaml && !printed_header {
+                        gsub(/"/, "", title)
+                        sub(/, /, "", tag_list)
+                        print "Title: " title
+                        if (tag_list) print "Tags:  " tag_list
+                        print "----------------------------------------"
+                        printed_header=1
+                        next
+                    }
+                    !in_yaml { print }
+                ' {}"""
+            ],
+            input="\n".join(str(f) for f in prompt_files).encode(),
+        ).decode().strip()
+    except subprocess.CalledProcessError:
+        # User cancelled the selection
+        raise typer.Exit(0)
+    except FileNotFoundError:
+        console.print(
+            Panel.fit(
+                "[red]Error: fzf not found.[/]\n"
+                "Please install fzf to use the edit command.",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    # Open the selected file in the editor
+    console.print(
+        Panel.fit(
+            f"Opening editor for you to edit the prompt.\n"
+            f"File: [bold blue]{selected_file}[/]",
+            title="Editing Prompt",
+            border_style="blue",
+        )
+    )
+    
+    if not open_editor(Path(selected_file)):
+        console.print(
+            Panel.fit(
+                "[red]Error: Failed to open editor.[/]",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    console.print(
+        Panel.fit(
+            "✅ Prompt updated successfully",
             title="Success",
             border_style="green",
         )
