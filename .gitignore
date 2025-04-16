@@ -54,4 +54,7 @@ htmlcov/
 .promptkeep/
 
 # Personal notes and planning
-architecture.txt 
+architecture.txt
+
+# Documentation
+site/ 
