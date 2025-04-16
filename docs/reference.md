@@ -1,6 +1,6 @@
 # PromptKeep Reference
 
-This document provides detailed technical reference for all PromptKeep commands, parameters, data structures, and file formats.
+This document provides detailed technical reference for PromptKeep's commands, parameters, data structures, file formats, and implementation details. For practical usage examples and workflows, see the [Usage Guide](usage.md).
 
 ## Command Reference
 
@@ -27,11 +27,15 @@ promptkeep init [PATH]
 |-----------|----------|--------|----------------|--------------------------------|
 | path      | No       | string | ~/PromptVault  | Location for the prompt vault  |
 
-#### Example
+#### Return Value
 
-```bash
-promptkeep init ~/my_prompts
-```
+None. Displays a success panel on completion.
+
+#### Side Effects
+
+- Creates directory structure for the vault
+- Removes existing content if the vault directory already exists
+- Creates an example prompt file
 
 ### add
 
@@ -50,11 +54,15 @@ promptkeep add [OPTIONS]
 | --tag              | No       | string[] | -       | Tags for the prompt (can specify multiple) |
 | --vault, -v        | No       | string   | ~/PromptVault | Path to the prompt vault   |
 
-#### Example
+#### Return Value
 
-```bash
-promptkeep add --title "Code Review" --tag "programming" --tag "review"
-```
+None. Displays a success panel on completion.
+
+#### Side Effects
+
+- Creates a new markdown file in the vault
+- Opens the user's text editor
+- May display warnings for similar existing prompts
 
 ### pick
 
@@ -66,16 +74,20 @@ promptkeep pick [OPTIONS]
 
 #### Parameters
 
-| Parameter     | Required | Type    | Default       | Description                     |
-|---------------|----------|---------|---------------|---------------------------------|
-| --vault, -v   | No       | string  | ~/PromptVault | Path to the prompt vault        |
-| --no-copy     | No       | flag    | -             | Don't copy to clipboard         |
+| Parameter     | Required | Type     | Default       | Description                     |
+|---------------|----------|----------|---------------|---------------------------------|
+| --vault, -v   | No       | string   | ~/PromptVault | Path to the prompt vault        |
+| --tag, -t     | No       | string[] | -             | Filter prompts by tag           |
+| --no-copy     | No       | flag     | -             | Don't copy to clipboard         |
 
-#### Example
+#### Return Value
 
-```bash
-promptkeep pick
-```
+None. Displays a success panel on completion.
+
+#### Side Effects
+
+- Copies prompt content to the system clipboard
+- Launches external `fzf` process for selection
 
 ### edit
 
@@ -90,45 +102,108 @@ promptkeep edit [OPTIONS]
 | Parameter     | Required | Type     | Default       | Description                     |
 |---------------|----------|----------|---------------|---------------------------------|
 | --vault, -v   | No       | string   | ~/PromptVault | Path to the prompt vault        |
-| --tags        | No       | string[] | -             | Filter by tags                  |
+| --tag, -t     | No       | string[] | -             | Filter prompts by tag           |
 
-#### Example
+#### Return Value
 
-```bash
-promptkeep edit --tags "programming"
-```
+None. Displays a success panel on completion.
 
-## Data Storage
+#### Side Effects
 
-### Prompt File Format
+- Launches external `fzf` process for selection
+- Opens the user's text editor
 
-Prompts are stored as Markdown files with YAML front matter using the following format:
+## Data Model
+
+### Prompt Structure
+
+Each prompt is represented as a Markdown file with YAML front matter:
 
 ```markdown
 ---
-title: Code Review Assistance
-description: Prompt for getting help with code reviews
-date: 2023-04-16
-tags:
-  - programming
-  - review
+title: "Title of the prompt"
+description: "Description of what the prompt does"
+tags: ["tag1", "tag2"]
+created: "2023-04-16 10:30:00"
 ---
 
-Please review the following code and provide feedback on:
-1. Code quality
-2. Potential bugs
-3. Performance issues
-4. Security concerns
-
-[code]
+The actual prompt content goes here.
 ```
 
-### File Locations
+#### YAML Fields
 
-| File        | Location        | Purpose              |
-|-------------|-----------------|----------------------|
-| *.md        | Prompt vault    | Individual prompts   |
-| .vault-id   | Prompt vault    | Vault identification |
+| Field       | Required | Type     | Description                                |
+|-------------|----------|-----------|--------------------------------------------|
+| title       | Yes      | string    | Title of the prompt                        |
+| description | No       | string    | Description of what the prompt does        |
+| tags        | No       | string[]  | Array of tags for categorization           |
+| created     | Auto     | datetime  | Creation timestamp (added automatically)   |
+
+### File System Structure
+
+The prompt vault follows this structure:
+
+```
+VaultPath/
+└── Prompts/
+    ├── example-prompt.md
+    ├── my-prompt-20230416-103000.md
+    └── another-prompt-20230416-104500.md
+```
+
+### Filename Format
+
+Prompt filenames are automatically generated using this pattern:
+
+```
+{sanitized-title}-{timestamp}.md
+```
+
+Where:
+- `sanitized-title` is the lowercase title with spaces replaced by hyphens and invalid characters removed
+- `timestamp` is in the format `YYYYMMDD-HHMMSS`
+
+## Environment Variables
+
+| Variable           | Purpose                              | Default   |
+|--------------------|--------------------------------------|-----------|
+| PROMPTKEEP_VAULT   | Default location for the prompt vault | ~/PromptVault |
+| EDITOR             | Preferred text editor                | vim       |
+
+## Exit Codes
+
+| Code | Meaning                                    |
+|------|-------------------------------------------|
+| 0    | Command completed successfully           |
+| 1    | General error (file not found, etc.)     |
+| 2    | User canceled operation                  |
+
+## Dependencies
+
+### Core Dependencies
+
+| Package    | Version | Purpose                        |
+|------------|---------|--------------------------------|
+| typer      | >=0.7.0 | Command line interface creation |
+| rich       | >=13.0.0| Terminal output formatting      |
+| pyperclip  | >=1.8.0 | Clipboard operations            |
+| pyyaml     | >=6.0   | YAML frontmatter parsing        |
+
+### External Dependencies
+
+| Dependency | Purpose                               | Installation                   |
+|------------|---------------------------------------|--------------------------------|
+| fzf        | Fuzzy finding for prompt selection    | Varies by platform (see below) |
+
+#### Installing fzf
+
+- **macOS**: `brew install fzf`
+- **Linux**: 
+  - Ubuntu/Debian: `apt install fzf`
+  - Fedora: `dnf install fzf`
+- **Windows**: 
+  - With Chocolatey: `choco install fzf`
+  - With Scoop: `scoop install fzf`
 
 ## Error Handling
 
@@ -140,21 +215,13 @@ Please review the following code and provide feedback on:
 | "No prompts found"               | Empty prompt vault             | Add some prompts first          |
 | "No prompts found for tags: X"   | No matches for tag filter      | Check tag names                 |
 | "Editor exited with non-zero code" | Editor failed to save         | Check if file was saved properly |
+| "fzf not found"                  | fzf is not installed           | Install fzf (see Dependencies)  |
 
-## Dependencies
+## Security Considerations
 
-* `typer`: Command line interface creation
-* `rich`: Terminal output formatting
-* `pyperclip`: Clipboard operations
-* `pyyaml`: YAML frontmatter parsing
-* `fzf`: Fuzzy searching (external dependency)
-
-## Environment Variables
-
-| Variable           | Purpose                              |
-|--------------------|--------------------------------------|
-| PROMPTKEEP_VAULT   | Default location for the prompt vault |
-| EDITOR             | Preferred text editor                |
+- Prompts are stored as plain text files and are not encrypted
+- No network connectivity is required; all operations are local
+- Consider vault location security if prompts contain sensitive information
 
 ## Limitations
 
@@ -162,5 +229,14 @@ Please review the following code and provide feedback on:
 * Title length: No explicit limit
 * Description length: No explicit limit
 * Tag length: No explicit limit
-* Number of prompts: No explicit limit
+* Number of prompts: No explicit limit (limited by filesystem)
+
+## API Structure
+
+PromptKeep is primarily a command-line tool, but its core functions are organized in modules:
+
+| Module              | Purpose                                     |
+|---------------------|---------------------------------------------|
+| promptkeep.cli      | Command-line interface and commands         |
+| promptkeep.utils    | Core utilities for file handling and clipboard |
 
