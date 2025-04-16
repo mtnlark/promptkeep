@@ -1,0 +1,13 @@
+site_name: PromptKeep
+
+theme:
+  name: material
+
+plugins:
+  - include-markdown
+
+nav:
+  - Home: index.md
+  - Usage: usage.md
+  - Reference: reference.md
+  - Contributing: contributing.md

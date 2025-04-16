@@ -297,3 +297,86 @@ def test_sanitize_filename():
     # Test length limit
     long_title = "Test Prompt" * 100
     assert len(sanitize_filename(long_title)) <= 100 
+
+
+@patch("promptkeep.cli.subprocess.check_output")
+@patch("promptkeep.cli.open_editor")
+def test_edit_command(mock_open_editor, mock_check_output, tmp_path):
+    """Test the edit command."""
+    # Create a test vault
+    vault_dir = tmp_path / "vault"
+    vault_dir.mkdir()
+    prompts_dir = vault_dir / "Prompts"
+    prompts_dir.mkdir()
+
+    # Create a test prompt
+    test_prompt = prompts_dir / "test.md"
+    test_prompt.write_text("""---
+title: "Test Prompt"
+tags: ["test", "example"]
+---
+This is a test prompt.""")
+
+    # Mock fzf to return our test prompt
+    mock_check_output.return_value = str(test_prompt).encode()
+    mock_open_editor.return_value = True
+
+    # Test without tags
+    cli.edit_command(vault_path=str(vault_dir), tags=None)
+
+    # Test with tags
+    cli.edit_command(vault_path=str(vault_dir), tags=["test"])
+
+    # Verify the editor was called twice
+    assert mock_open_editor.call_count == 2
+    assert mock_check_output.call_count == 2
+
+@patch("promptkeep.cli.subprocess.check_output")
+@patch("promptkeep.cli.open_editor")
+def test_edit_command_editor_failure(mock_open_editor, mock_check_output, tmp_path):
+    """Test the edit command when editor fails."""
+    # Create a test vault
+    vault_dir = tmp_path / "vault"
+    vault_dir.mkdir()
+    prompts_dir = vault_dir / "Prompts"
+    prompts_dir.mkdir()
+
+    # Create a test prompt
+    test_prompt = prompts_dir / "test.md"
+    test_prompt.write_text("""---
+title: "Test Prompt"
+tags: ["test"]
+---
+This is a test prompt.""")
+
+    # Mock fzf to return our test prompt
+    mock_check_output.return_value = str(test_prompt).encode()
+    mock_open_editor.return_value = False
+
+    with pytest.raises(typer.Exit) as exc_info:
+        cli.edit_command(vault_path=str(vault_dir), tags=None)
+    assert exc_info.value.exit_code == 1
+
+@patch("promptkeep.cli.subprocess.check_output")
+def test_edit_command_fzf_not_found(mock_check_output, tmp_path):
+    """Test the edit command when fzf is not installed."""
+    # Create a test vault
+    vault_dir = tmp_path / "vault"
+    vault_dir.mkdir()
+    prompts_dir = vault_dir / "Prompts"
+    prompts_dir.mkdir()
+
+    # Create a test prompt
+    test_prompt = prompts_dir / "test.md"
+    test_prompt.write_text("""---
+title: "Test Prompt"
+tags: ["test"]
+---
+This is a test prompt.""")
+
+    # Mock fzf to raise FileNotFoundError
+    mock_check_output.side_effect = FileNotFoundError()
+
+    with pytest.raises(typer.Exit) as exc_info:
+        cli.edit_command(vault_path=str(vault_dir), tags=None)
+    assert exc_info.value.exit_code == 1 
