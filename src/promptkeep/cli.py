@@ -129,11 +129,20 @@ def add_command(
         help="Description of the prompt",
         prompt="Enter a description (optional)",
     ),
+    # Option for handling multiple --tag flags
     tags: List[str] = typer.Option(
-        [],
-        "--tag",
-        help="Tags for the prompt (can be specified multiple times)",
+        [], # Default to empty list
+        "--tag", # Keep the flag name consistent
+        help="Tags for the prompt (can be specified multiple times, e.g., --tag tag1 --tag tag2)",
+        # Removed prompt= from here
+    ),
+    # Separate hidden option to capture raw string input from the prompt
+    tags_prompt_str: Optional[str] = typer.Option(
+        "", # Default to empty string to allow skipping prompt
         prompt="Enter tags separated by commas (optional)",
+        help="Internal use for prompt input",
+        hidden=True, # Hide this from --help output
+        show_default=False, # Don't show the default in help
     ),
     vault_path: Optional[str] = typer.Option(
         None,
@@ -165,7 +174,8 @@ def add_command(
     Args:
         title: The title of the prompt
         description: Optional description of the prompt
-        tags: Optional list of tags for categorizing the prompt
+        tags: Optional list of tags for categorizing the prompt (from --tag flags)
+        tags_prompt_str: Optional string of comma-separated tags (from prompt)
         vault_path: Optional path to the prompt vault
         
     Raises:
@@ -187,9 +197,14 @@ def add_command(
         
     prompts_dir = expanded_vault / "Prompts"
 
-    # Process comma-separated tags if provided as a single string
-    if len(tags) == 1 and "," in tags[0]:
-        tags = [tag.strip() for tag in tags[0].split(",")]
+    # Combine tags from --tag flags and the prompt string
+    processed_tags = tags[:] # Start with tags from flags
+    if tags_prompt_str:
+        prompt_tags = [tag.strip() for tag in tags_prompt_str.split(",") if tag.strip()]
+        processed_tags.extend(prompt_tags)
+        
+    # Ensure uniqueness and sort for consistency
+    processed_tags = sorted(list(set(processed_tags)))
 
     # Create filename from title and timestamp
     filename = sanitize_filename(title)
@@ -212,7 +227,7 @@ def add_command(
             raise typer.Exit(0)
 
     # Create the prompt template with YAML front matter
-    yaml_tags = ", ".join([f'"{tag.strip()}"' for tag in tags])
+    yaml_tags = ", ".join([f'"{tag}"' for tag in processed_tags])
     prompt_content = f"""---
 title: "{title}"
 description: "{description}"

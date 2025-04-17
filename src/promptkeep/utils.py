@@ -171,12 +171,33 @@ def open_editor(file_path: Path) -> bool:
         True if the editor was opened successfully, False otherwise
     """
     editor = os.environ.get("EDITOR", "vim")
+    
     try:
-        subprocess.run([editor, str(file_path)], check=True)
+        # Split editor command into parts if it contains spaces
+        editor_parts = editor.split()
+        
+        if len(editor_parts) > 1:
+            # For commands with arguments like "code --wait" or "cursor --wait"
+            command = editor_parts[0]
+            args = editor_parts[1:]
+            args.append(str(file_path))
+            # Use the shell=True option to handle commands with spaces correctly
+            subprocess.run(f"{command} {' '.join(args)}", shell=True, check=True)
+        else:
+            # For simple commands like "vim"
+            subprocess.run([editor, str(file_path)], check=True)
         return True
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        console.print(
+            Panel.fit(
+                f"[red]Error: Editor command '{editor}' failed.[/]\n"
+                "The editor was found but exited with an error code.",
+                title="Error",
+                border_style="red",
+            )
+        )
         return False
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         console.print(
             Panel.fit(
                 f"[red]Error: Editor '{editor}' not found.[/]\n"
@@ -185,4 +206,7 @@ def open_editor(file_path: Path) -> bool:
                 border_style="red",
             )
         )
+        return False
+    except Exception as e:
+        console.print(f"Unexpected error opening editor: {type(e).__name__}")
         return False 
