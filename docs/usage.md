@@ -45,9 +45,9 @@ Now that you have a vault, let's add your first prompt:
 
 2. You'll be asked to add a title, description, and tags (the latter two are optional):
    ```
-   Enter a title for your prompt: Email Response Template
-   Enter a description (optional): Professional response for client emails
-   Enter tags separated by commas (optional): email, professional, client
+   Enter a title for your prompt: Code Review Prompt
+   Enter a description (optional): Detailed code review analysis for pull requests
+   Enter tags separated by commas (optional): coding, code review, debugging
    ```
 
 3. Your default text editor will open. Add the prompt content below the YAML front matter:
@@ -55,7 +55,7 @@ Now that you have a vault, let's add your first prompt:
    ---
    title: "Code Review Prompt"
    description: "Detailed code review analysis for pull requests"
-   tags: ["coding", "review", "ai"]
+   tags: ["coding", "code review", "debugging"]
    ---
 
    # Code Review Analysis
@@ -64,7 +64,6 @@ Now that you have a vault, let's add your first prompt:
 
    ```[LANGUAGE]
    [PASTE CODE HERE]
-   ```
 
    Focus on these aspects:
    1. Code quality and best practices
