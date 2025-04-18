@@ -41,6 +41,7 @@ promptkeep pick
 ## Technical Details
 
 Built with:
+
 - Python 3.8+
 - Typer for CLI interface
 - Rich for terminal output

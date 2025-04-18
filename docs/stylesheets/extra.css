@@ -1,0 +1,108 @@
+/* Better typography */
+:root {
+    --md-text-font: "Inter";
+    --md-code-font: "Fira Code Nerd Font";
+}
+
+/* Improve readability */
+.md-typeset {
+    font-size: 0.75rem;
+    line-height: 1.6;
+}
+
+.md-typeset h1 {
+    font-weight: 700;
+    color: var(--md-primary-fg-color);
+}
+
+.md-typeset h2 {
+    font-weight: 600;
+}
+
+/* Better code blocks */
+.highlight {
+    background-color: var(--md-code-bg-color);
+    border-radius: 4px;
+}
+
+.highlight pre {
+    padding: 1em;
+}
+
+/* Improved admonitions */
+.md-typeset .admonition,
+.md-typeset details {
+    border-width: 0;
+    border-left-width: 4px;
+    border-radius: 4px;
+}
+
+/* Better navigation */
+.md-nav {
+    font-size: 0.7rem;
+}
+
+.md-nav__title {
+    font-weight: 700;
+}
+
+.md-nav__link {
+    padding: 0.2rem 0;
+}
+
+/* Smooth transitions */
+.md-nav__link,
+.md-typeset a,
+.md-header__button {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Better tables */
+.md-typeset table:not([class]) {
+    border-radius: 4px;
+    box-shadow: var(--md-shadow-z1);
+}
+
+.md-typeset table:not([class]) th {
+    background-color: var(--md-primary-fg-color);
+    color: var(--md-primary-bg-color);
+}
+
+/* Custom scrollbar for dark mode */
+[data-md-color-scheme="slate"] {
+    --md-code-bg-color: hsla(232, 15%, 15%, 1);
+    --md-code-fg-color: hsla(232, 18%, 86%, 1);
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb {
+    background-color: hsla(232, 15%, 30%, 0.8);
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-track {
+    background-color: hsla(232, 15%, 15%, 0.8);
+}
+
+/* Better buttons */
+.md-typeset .md-button {
+    border-radius: 4px;
+    transition: all 0.2s ease-in-out;
+}
+
+.md-typeset .md-button:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--md-shadow-z2);
+}
+
+/* Improved search */
+.md-search__form {
+    border-radius: 4px;
+    background-color: var(--md-code-bg-color);
+}
+
+/* Better mobile experience */
+@media screen and (max-width: 76.1875em) {
+    .md-nav--primary .md-nav__title {
+        background-color: var(--md-primary-fg-color);
+        color: var(--md-primary-bg-color);
+    }
+}

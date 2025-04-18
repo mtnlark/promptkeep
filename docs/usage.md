@@ -165,22 +165,6 @@ This will only show prompts with the "meeting" tag.
 
 ## Maintaining Your Prompt Library
 
-### Updating Existing Prompts
-
-As your needs evolve, update your prompts:
-
-1. Find and edit a prompt:
-   ```bash
-   promptkeep edit
-   ```
-
-2. Filter to find the prompt you want to update:
-   ```bash
-   promptkeep edit --tag documentation
-   ```
-
-3. Make your changes in the editor and save.
-
 ### Organizing Your Prompts
 
 Use tags consistently to create an organized system. Consider a tagging structure like:
@@ -189,6 +173,23 @@ Use tags consistently to create an organized system. Consider a tagging structur
 - Audience: `client`, `team`, `public`
 - Project: `projectA`, `projectB`
 - Purpose: `template`, `reference`, `guide`
+
+## Editing Prompts
+
+To edit an existing prompt, use the `edit` command:
+
+```bash
+promptkeep edit
+```
+
+This will open a fuzzy finder to select the prompt you want to edit. You can filter prompts by tags using the `--tag` or `-t` option:
+
+```bash
+promptkeep edit --tag python --tag ai  # Edit prompts tagged with both "python" and "ai"
+promptkeep edit -t coding             # Edit prompts tagged with "coding"
+```
+
+Once you select a prompt, it will open in your default text editor. Make your changes and save the file to update the prompt.
 
 ## Troubleshooting
 
