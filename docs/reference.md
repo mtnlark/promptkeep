@@ -199,11 +199,11 @@ Where:
 
 - **macOS**: `brew install fzf`
 - **Linux**: 
-  - Ubuntu/Debian: `apt install fzf`
-  - Fedora: `dnf install fzf`
+    - Ubuntu/Debian: `apt install fzf`
+    - Fedora: `dnf install fzf`
 - **Windows**: 
-  - With Chocolatey: `choco install fzf`
-  - With Scoop: `scoop install fzf`
+    - With Chocolatey: `choco install fzf`
+    - With Scoop: `scoop install fzf`
 
 ## Error Handling
 
@@ -225,11 +225,11 @@ Where:
 
 ## Limitations
 
-* Maximum file size: No explicit limit (limited by system memory)
-* Title length: No explicit limit
-* Description length: No explicit limit
-* Tag length: No explicit limit
-* Number of prompts: No explicit limit (limited by filesystem)
+- **Maximum file size:** No explicit limit (limited by system memory)
+- **Title length:** No explicit limit
+- **Description length:** No explicit limit
+- **Tag length:** No explicit limit
+- **Number of prompts:** No explicit limit (limited by filesystem)
 
 ## API Structure
 

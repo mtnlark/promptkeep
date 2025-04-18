@@ -1,10 +1,9 @@
-/* Better typography */
+/* Typography */
 :root {
     --md-text-font: "Inter";
     --md-code-font: "Fira Code Nerd Font";
 }
 
-/* Improve readability */
 .md-typeset {
     font-size: 0.75rem;
     line-height: 1.6;
@@ -19,7 +18,7 @@
     font-weight: 600;
 }
 
-/* Better code blocks */
+/* Code blocks */
 .highlight {
     background-color: var(--md-code-bg-color);
     border-radius: 4px;
@@ -29,7 +28,7 @@
     padding: 1em;
 }
 
-/* Improved admonitions */
+/* Admonitions */
 .md-typeset .admonition,
 .md-typeset details {
     border-width: 0;
@@ -37,7 +36,7 @@
     border-radius: 4px;
 }
 
-/* Better navigation */
+/* Navigation */
 .md-nav {
     font-size: 0.7rem;
 }
@@ -50,14 +49,14 @@
     padding: 0.2rem 0;
 }
 
-/* Smooth transitions */
+/* Transitions */
 .md-nav__link,
 .md-typeset a,
 .md-header__button {
     transition: all 0.2s ease-in-out;
 }
 
-/* Better tables */
+/* Tables */
 .md-typeset table:not([class]) {
     border-radius: 4px;
     box-shadow: var(--md-shadow-z1);
@@ -82,7 +81,7 @@
     background-color: hsla(232, 15%, 15%, 0.8);
 }
 
-/* Better buttons */
+/* Buttons */
 .md-typeset .md-button {
     border-radius: 4px;
     transition: all 0.2s ease-in-out;
@@ -93,7 +92,7 @@
     box-shadow: var(--md-shadow-z2);
 }
 
-/* Improved search */
+/* Search */
 .md-search__form {
     border-radius: 4px;
     background-color: var(--md-code-bg-color);

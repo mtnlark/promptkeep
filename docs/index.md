@@ -2,7 +2,7 @@
 
 A CLI tool for managing and accessing AI prompts, built with Python.
 
-PromptKeep helps you organize, access, and reuse AI prompts through a simple command-line interface. It stores prompts as Markdown files with YAML metadata, making them easy to manage and version control.
+PromptKeep helps you organize, access, and reuse your AI prompts through a simple command-line interface. It stores prompts as Markdown files with YAML metadata, making them easy to manage and version control, and lets you quickly find stored prompts and copy them to your clipboard.
 
 ## Features
 
@@ -18,10 +18,10 @@ PromptKeep helps you organize, access, and reuse AI prompts through a simple com
 ```bash
 git clone https://github.com/mtnlark/promptkeep.git
 cd promptkeep
-pip install -e .
+pip install .
 ```
 
-## Usage
+## Usage Basics
 
 1. Initialize a prompt vault:
 ```bash
@@ -36,6 +36,11 @@ promptkeep add --title "Code Review Assistance"
 3. Select and copy a prompt:
 ```bash
 promptkeep pick
+```
+
+4. Edit an existing prompt:
+```bash
+promptkeep edit
 ```
 
 ## Technical Details

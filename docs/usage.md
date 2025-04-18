@@ -32,6 +32,8 @@ If you want to keep your vault somewhere else, specify the path:
 promptkeep init ~/Documents/MyPrompts
 ```
 
+Once you do this, PromptKeep will remember that this is your stored prompts directory; you don't need to create another vault unless you want to override an existing vault or store certain prompts in separate vaults.
+
 ### Creating Your First Prompt
 
 Now that you have a vault, let's add your first prompt:
@@ -41,7 +43,7 @@ Now that you have a vault, let's add your first prompt:
    promptkeep add
    ```
 
-2. You'll be prompted for information:
+2. You'll be asked to add a title, description, and tags (the latter two are optional):
    ```
    Enter a title for your prompt: Email Response Template
    Enter a description (optional): Professional response for client emails
@@ -116,9 +118,9 @@ Tags make it easier to organize and find your prompts:
 
 This will only show prompts with the "meeting" tag.
 
-## Common Workflows
+## Example Workflows
 
-### Creating Effective AI Coding Assistants
+### Creating AI Coding Assistants
 
 1. Create specialized coding prompts for different scenarios:
    ```bash
@@ -126,12 +128,12 @@ This will only show prompts with the "meeting" tag.
    promptkeep add --title "Refactoring Guide" --tag coding --tag refactoring
    ```
 
-2. When you encounter a coding challenge, find the right prompt:
+2. When you encounter a coding issue, find the right prompt:
    ```bash
    promptkeep pick --tag coding
    ```
 
-3. Fill in the details with your specific code and context, then send to your AI assistant.
+3. Fill in the details with your specific code and context, then send to your preferred AI assistant.
 
 ### Building a Knowledge Management System
 
@@ -146,11 +148,11 @@ This will only show prompts with the "meeting" tag.
    promptkeep pick --tag research
    ```
 
-3. Combine with your source material and send to an AI assistant to generate organized notes or summaries.
+3. Combine with your source material and send to your preferred AI assistant to generate organized notes or summaries.
 
 ### Creating Persona-Based AI Interactions
 
-1. Define different AI personas for different types of feedback:
+1. Define different AI personas to offer you different types of feedback:
    ```bash
    promptkeep add --title "Technical Expert Persona" --tag persona --tag technical
    promptkeep add --title "Writing Coach Persona" --tag persona --tag writing
@@ -197,12 +199,12 @@ Once you select a prompt, it will open in your default text editor. Make your ch
 
 If you see this error, your prompt vault can't be located. Try:
 
-1. Specify the vault path explicitly:
+1. Specifying the vault path explicitly:
    ```bash
    promptkeep pick --vault ~/path/to/your/vault
    ```
 
-2. Or set the environment variable:
+2. Or setting the environment variable:
    ```bash
    export PROMPTKEEP_VAULT=~/path/to/your/vault
    promptkeep pick
@@ -217,7 +219,7 @@ This means there was a problem with your text editor:
    echo $EDITOR
    ```
 
-2. Try setting it explicitly:
+2. If not, try setting it explicitly:
    ```bash
    export EDITOR=nano  # or vim, code, etc.
    ```
