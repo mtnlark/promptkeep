@@ -4,6 +4,8 @@ A CLI tool for managing and accessing AI prompts, built with Python.
 
 PromptKeep helps you organize, access, and reuse AI prompts through a simple command-line interface. It stores prompts as Markdown files with YAML metadata, making them easy to manage and version control.
 
+Detailed docs: [promptkeep.levcraig.com](https://promptkeep.levcraig.com/)
+
 ## Features
 
 - Store prompts in Markdown files with YAML front matter
