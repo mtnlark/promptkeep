@@ -8,9 +8,10 @@ Typer-based CLI application defined in the cli module.
 """
 from promptkeep.cli import app
 
-def main():
+
+def main() -> None:
     """Execute the PromptKeep CLI application.
-    
+
     This function serves as the main entry point for the application,
     initializing and running the Typer-based CLI interface.
     """

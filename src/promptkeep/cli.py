@@ -5,7 +5,6 @@ This module implements the command-line interface for PromptKeep, providing comm
 for initializing a prompt vault, adding new prompts, and selecting existing prompts.
 It uses Typer for CLI argument parsing and Rich for terminal output formatting.
 """
-import os
 import shutil
 import subprocess
 from datetime import datetime
@@ -17,6 +16,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from promptkeep.constants import DEFAULT_VAULT_PATH, PROMPTS_DIR_NAME
+from promptkeep.models import Prompt
+from promptkeep.repository import PromptRepository
 from promptkeep.utils import (
     copy_to_clipboard,
     extract_prompt_content,
@@ -28,6 +30,27 @@ from promptkeep.utils import (
 # Initialize the Typer app with a help message
 app = typer.Typer(help="PromptKeep - A CLI tool for managing and accessing your AI prompts")
 console = Console()
+
+# Awk script for fzf preview - extracts title, tags and content from prompt files
+_FZF_PREVIEW_SCRIPT = """awk '
+    BEGIN { in_yaml=0; printed_header=0 }
+    /^---$/ { in_yaml = !in_yaml; next }
+    in_yaml {
+        if ($1 == "title:") title = substr($0, 8)
+        if ($1 == "tags:") { tags=1; next }
+        if (tags && $1 == "-") tag_list = tag_list ", " substr($0, 3)
+    }
+    !in_yaml && !printed_header {
+        gsub(/"/, "", title)
+        sub(/, /, "", tag_list)
+        print "Title: " title
+        if (tag_list) print "Tags:  " tag_list
+        print "----------------------------------------"
+        printed_header=1
+        next
+    }
+    !in_yaml { print }
+' {}'"""
 
 
 def create_prompt_template(prompts_dir: Path) -> None:
@@ -60,7 +83,7 @@ modify the YAML front matter and prompt content as needed.
 @app.command("init")
 def init_command(
     vault_path: str = typer.Argument(
-        "~/PromptVault",
+        DEFAULT_VAULT_PATH,
         help="Path where your prompt vault will be created",
     ),
 ) -> None:
@@ -93,7 +116,7 @@ def init_command(
         
         # Create the vault directory and prompts subdirectory
         expanded_path.mkdir(parents=True, exist_ok=True)
-        prompts_dir = expanded_path / "Prompts"
+        prompts_dir = expanded_path / PROMPTS_DIR_NAME
         prompts_dir.mkdir(exist_ok=True)
         
         # Create template prompt
@@ -193,13 +216,14 @@ def add_command(
                 border_style="yellow",
             )
         )
-        raise typer.Exit(1)
-        
-    prompts_dir = expanded_vault / "Prompts"
+        raise typer.Exit(1) from None
+
+    prompts_dir = expanded_vault / PROMPTS_DIR_NAME
 
     # Combine tags from --tag flags and the prompt string
     processed_tags = tags[:] # Start with tags from flags
-    if tags_prompt_str:
+    # Check if tags_prompt_str is actually a string (handles Typer OptionInfo in direct calls)
+    if tags_prompt_str and isinstance(tags_prompt_str, str):
         prompt_tags = [tag.strip() for tag in tags_prompt_str.split(",") if tag.strip()]
         processed_tags.extend(prompt_tags)
         
@@ -226,18 +250,16 @@ def add_command(
         if not typer.confirm("Do you want to continue?"):
             raise typer.Exit(0)
 
-    # Create the prompt template with YAML front matter
-    yaml_tags = ", ".join([f'"{tag}"' for tag in processed_tags])
-    prompt_content = f"""---
-title: "{title}"
-description: "{description}"
-tags: [{yaml_tags}]
----
+    # Create the prompt using the Prompt model (handles YAML escaping properly)
+    prompt = Prompt(
+        title=title,
+        description=description,
+        tags=processed_tags,
+        content=""  # Content will be added by the user in the editor
+    )
 
-"""
-
-    # Write the template to the file
-    prompt_path.write_text(prompt_content)
+    # Write the template to the file using the model's YAML serialization
+    prompt_path.write_text(prompt.to_markdown())
 
     # Open the editor for the user to edit the content
     console.print(
@@ -323,49 +345,13 @@ def pick_command(
     """
     # Validate vault path
     expanded_vault = validate_vault_path(vault_path)
-    prompts_dir = expanded_vault / "Prompts"
 
-    # Get all markdown files
-    prompt_files = list(prompts_dir.glob("*.md"))
+    # Use repository for file operations and tag filtering
+    repo = PromptRepository(expanded_vault)
+    prompt_files = repo.get_file_paths(tags=list(tags) if tags else None)
+
     if not prompt_files:
-        console.print(
-            Panel.fit(
-                "[yellow]No prompts found in the vault.[/]\n"
-                "Use 'promptkeep add' to create a new prompt.",
-                title="Warning",
-                border_style="yellow",
-            )
-        )
-        raise typer.Exit(1)
-
-    # Filter prompts by tags if specified
-    if tags:
-        filtered_files = []
-        for file in prompt_files:
-            content = file.read_text()
-            file_tags = []
-            in_yaml = False
-            for line in content.splitlines():
-                if line.strip() == "---":
-                    in_yaml = not in_yaml
-                    continue
-                if in_yaml:
-                    # Handle inline array format: tags: ["tag1", "tag2"]
-                    if line.strip().startswith("tags:"):
-                        tags_str = line.split("tags:", 1)[1].strip()
-                        if tags_str.startswith("["):
-                            # Remove brackets and split by comma
-                            tags_str = tags_str.strip("[]")
-                            file_tags.extend(tag.strip().strip('"\'') for tag in tags_str.split(","))
-                        # Handle block format: - tag1
-                        elif line.strip().startswith("- "):
-                            tag = line.strip()[2:].strip().strip('"\'')
-                            file_tags.append(tag)
-                if all(tag in file_tags for tag in tags):
-                    filtered_files.append(file)
-        prompt_files = filtered_files
-        
-        if not prompt_files:
+        if tags:
             tag_list = ", ".join(f"'{tag}'" for tag in tags)
             console.print(
                 Panel.fit(
@@ -374,39 +360,26 @@ def pick_command(
                     border_style="yellow",
                 )
             )
-            raise typer.Exit(1)
+        else:
+            console.print(
+                Panel.fit(
+                    "[yellow]No prompts found in the vault.[/]\n"
+                    "Use 'promptkeep add' to create a new prompt.",
+                    title="Warning",
+                    border_style="yellow",
+                )
+            )
+        raise typer.Exit(1)
 
     # Use fzf to select a file with enhanced preview showing title, tags, and content
     try:
         selected_file = subprocess.check_output(
-            [
-                "fzf",
-                "--prompt", "Select a prompt: ",
-                "--preview", """awk '
-                    BEGIN { in_yaml=0; printed_header=0 }
-                    /^---$/ { in_yaml = !in_yaml; next }
-                    in_yaml {
-                        if ($1 == "title:") title = substr($0, 8)
-                        if ($1 == "tags:") { tags=1; next }
-                        if (tags && $1 == "-") tag_list = tag_list ", " substr($0, 3)
-                    }
-                    !in_yaml && !printed_header {
-                        gsub(/"/, "", title)
-                        sub(/, /, "", tag_list)
-                        print "Title: " title
-                        if (tag_list) print "Tags:  " tag_list
-                        print "----------------------------------------"
-                        printed_header=1
-                        next
-                    }
-                    !in_yaml { print }
-                ' {}"""
-            ],
+            ["fzf", "--prompt", "Select a prompt: ", "--preview", _FZF_PREVIEW_SCRIPT],
             input="\n".join(str(f) for f in prompt_files).encode(),
         ).decode().strip()
     except subprocess.CalledProcessError:
         # User cancelled the selection
-        raise typer.Exit(0)
+        raise typer.Exit(0) from None
     except FileNotFoundError:
         console.print(
             Panel.fit(
@@ -416,7 +389,7 @@ def pick_command(
                 border_style="red",
             )
         )
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Read and extract the prompt content
     content = Path(selected_file).read_text()
@@ -484,49 +457,13 @@ def edit_command(
     """
     # Validate vault path
     expanded_vault = validate_vault_path(vault_path)
-    prompts_dir = expanded_vault / "Prompts"
 
-    # Get all markdown files
-    prompt_files = list(prompts_dir.glob("*.md"))
+    # Use repository for file operations and tag filtering
+    repo = PromptRepository(expanded_vault)
+    prompt_files = repo.get_file_paths(tags=list(tags) if tags else None)
+
     if not prompt_files:
-        console.print(
-            Panel.fit(
-                "[yellow]No prompts found in the vault.[/]\n"
-                "Use 'promptkeep add' to create a new prompt.",
-                title="Warning",
-                border_style="yellow",
-            )
-        )
-        raise typer.Exit(1)
-
-    # Filter prompts by tags if specified
-    if tags and len(tags) > 0:
-        filtered_files = []
-        for file in prompt_files:
-            content = file.read_text()
-            file_tags = []
-            in_yaml = False
-            for line in content.splitlines():
-                if line.strip() == "---":
-                    in_yaml = not in_yaml
-                    continue
-                if in_yaml:
-                    # Handle inline array format: tags: ["tag1", "tag2"]
-                    if line.strip().startswith("tags:"):
-                        tags_str = line.split("tags:", 1)[1].strip()
-                        if tags_str.startswith("["):
-                            # Remove brackets and split by comma
-                            tags_str = tags_str.strip("[]")
-                            file_tags.extend(tag.strip().strip('"\'') for tag in tags_str.split(","))
-                    # Handle block format: - tag1
-                    elif line.strip().startswith("- "):
-                        tag = line.strip()[2:].strip().strip('"\'')
-                        file_tags.append(tag)
-            if all(tag in file_tags for tag in tags):
-                filtered_files.append(file)
-        prompt_files = filtered_files
-
-        if not prompt_files:
+        if tags:
             tag_list = ", ".join(f"'{tag}'" for tag in tags)
             console.print(
                 Panel.fit(
@@ -535,39 +472,26 @@ def edit_command(
                     border_style="yellow",
                 )
             )
-            raise typer.Exit(1)
+        else:
+            console.print(
+                Panel.fit(
+                    "[yellow]No prompts found in the vault.[/]\n"
+                    "Use 'promptkeep add' to create a new prompt.",
+                    title="Warning",
+                    border_style="yellow",
+                )
+            )
+        raise typer.Exit(1)
 
     # Use fzf to select a file with enhanced preview showing title, tags, and content
     try:
         selected_file = subprocess.check_output(
-            [
-                "fzf",
-                "--prompt", "Select a prompt to edit: ",
-                "--preview", """awk '
-                    BEGIN { in_yaml=0; printed_header=0 }
-                    /^---$/ { in_yaml = !in_yaml; next }
-                    in_yaml {
-                        if ($1 == "title:") title = substr($0, 8)
-                        if ($1 == "tags:") { tags=1; next }
-                        if (tags && $1 == "-") tag_list = tag_list ", " substr($0, 3)
-                    }
-                    !in_yaml && !printed_header {
-                        gsub(/"/, "", title)
-                        sub(/, /, "", tag_list)
-                        print "Title: " title
-                        if (tag_list) print "Tags:  " tag_list
-                        print "----------------------------------------"
-                        printed_header=1
-                        next
-                    }
-                    !in_yaml { print }
-                ' {}"""
-            ],
+            ["fzf", "--prompt", "Select a prompt to edit: ", "--preview", _FZF_PREVIEW_SCRIPT],
             input="\n".join(str(f) for f in prompt_files).encode(),
         ).decode().strip()
     except subprocess.CalledProcessError:
         # User cancelled the selection
-        raise typer.Exit(0)
+        raise typer.Exit(0) from None
     except FileNotFoundError:
         console.print(
             Panel.fit(
@@ -577,7 +501,7 @@ def edit_command(
                 border_style="red",
             )
         )
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Open the selected file in the editor
     console.print(
@@ -608,7 +532,7 @@ def edit_command(
     )
 
 
-def main():
+def main() -> None:
     """Entry point for the PromptKeep CLI application."""
     app()
 

@@ -6,14 +6,25 @@ including file path management, clipboard operations, and text processing.
 """
 import os
 import re
+import shlex
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import pyperclip
 import typer
 from rich.console import Console
 from rich.panel import Panel
+
+from promptkeep.constants import (
+    DEFAULT_EDITOR,
+    DEFAULT_VAULT_PATH,
+    ENV_EDITOR,
+    ENV_VAULT_PATH,
+    MAX_FILENAME_LENGTH,
+    PROMPTS_DIR_NAME,
+    YAML_DELIMITER,
+)
 
 console = Console()
 
@@ -56,8 +67,8 @@ def sanitize_filename(title: str) -> str:
     sanitized = sanitized.strip('-')
     
     # Enforce maximum filename length to prevent filesystem issues
-    if len(sanitized) > 100:
-        sanitized = sanitized[:100]
+    if len(sanitized) > MAX_FILENAME_LENGTH:
+        sanitized = sanitized[:MAX_FILENAME_LENGTH]
     
     return sanitized
 
@@ -73,15 +84,15 @@ def find_vault_path() -> Optional[Path]:
         Path to the vault if found, None otherwise
     """
     # First, check environment variable for custom vault location
-    env_path = os.environ.get("PROMPTKEEP_VAULT")
+    env_path = os.environ.get(ENV_VAULT_PATH)
     if env_path:
         path = Path(env_path).expanduser().absolute()
-        if path.exists() and (path / "Prompts").exists():
+        if path.exists() and (path / PROMPTS_DIR_NAME).exists():
             return path
 
     # Check default location if environment variable not set or invalid
-    default_path = Path("~/PromptVault").expanduser().absolute()
-    if default_path.exists() and (default_path / "Prompts").exists():
+    default_path = Path(DEFAULT_VAULT_PATH).expanduser().absolute()
+    if default_path.exists() and (default_path / PROMPTS_DIR_NAME).exists():
         return default_path
 
     # No valid vault found
@@ -105,6 +116,7 @@ def validate_vault_path(vault_path: Optional[str]) -> Path:
     Raises:
         typer.Exit: If the vault is not found or is invalid
     """
+    expanded_vault: Optional[Path]
     if vault_path:
         expanded_vault = Path(vault_path).expanduser().absolute()
     else:
@@ -114,14 +126,15 @@ def validate_vault_path(vault_path: Optional[str]) -> Path:
         console.print(
             Panel.fit(
                 "[red]Error: No vault found.[/]\n"
-                "Use 'promptkeep init' to create a vault or specify a vault path with --vault.",
+                "Use 'promptkeep init' to create a vault or specify "
+                "a vault path with --vault.",
                 title="Error",
                 border_style="red",
             )
         )
         raise typer.Exit(1)
 
-    prompts_dir = expanded_vault / "Prompts"
+    prompts_dir = expanded_vault / PROMPTS_DIR_NAME
     if not prompts_dir.exists() or not prompts_dir.is_dir():
         console.print(
             Panel.fit(
@@ -155,7 +168,7 @@ def extract_prompt_content(content: str) -> str:
         The prompt content without the YAML front matter
     """
     # Split the content into YAML and prompt text
-    parts = content.split("---", 2)
+    parts = content.split(YAML_DELIMITER, 2)
     if len(parts) == 3:
         return parts[2].strip()
     return content.strip()
@@ -163,31 +176,29 @@ def extract_prompt_content(content: str) -> str:
 
 def open_editor(file_path: Path) -> bool:
     """Open the user's default editor to edit a file.
-    
+
+    Uses shlex.split() for safe command parsing to prevent shell injection.
+    Never uses shell=True with user-controlled input.
+
     Args:
         file_path: Path to the file to edit
-        
+
     Returns:
         True if the editor was opened successfully, False otherwise
     """
-    editor = os.environ.get("EDITOR", "vim")
-    
+    editor = os.environ.get(ENV_EDITOR, DEFAULT_EDITOR)
+
     try:
-        # Split editor command into parts if it contains spaces
-        editor_parts = editor.split()
-        
-        if len(editor_parts) > 1:
-            # For commands with arguments like "code --wait" or "cursor --wait"
-            command = editor_parts[0]
-            args = editor_parts[1:]
-            args.append(str(file_path))
-            # Use the shell=True option to handle commands with spaces correctly
-            subprocess.run(f"{command} {' '.join(args)}", shell=True, check=True)
-        else:
-            # For simple commands like "vim"
-            subprocess.run([editor, str(file_path)], check=True)
+        # Use shlex.split() for safe parsing of editor command
+        # This handles quoted arguments properly and prevents shell injection
+        editor_parts = shlex.split(editor)
+        editor_parts.append(str(file_path))
+
+        # Always use list-based subprocess call without shell=True
+        # This prevents shell metacharacter interpretation
+        subprocess.run(editor_parts, check=True)
         return True
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError:
         console.print(
             Panel.fit(
                 f"[red]Error: Editor command '{editor}' failed.[/]\n"
@@ -197,7 +208,7 @@ def open_editor(file_path: Path) -> bool:
             )
         )
         return False
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         console.print(
             Panel.fit(
                 f"[red]Error: Editor '{editor}' not found.[/]\n"
@@ -207,6 +218,23 @@ def open_editor(file_path: Path) -> bool:
             )
         )
         return False
+    except ValueError:
+        # shlex.split() raises ValueError on malformed input (unclosed quotes)
+        console.print(
+            Panel.fit(
+                f"[red]Error: Invalid EDITOR value '{editor}'.[/]\n"
+                "Please check your EDITOR environment variable for unclosed quotes.",
+                title="Error",
+                border_style="red",
+            )
+        )
+        return False
     except Exception as e:
-        console.print(f"Unexpected error opening editor: {type(e).__name__}")
-        return False 
+        console.print(
+            Panel.fit(
+                f"[red]Unexpected error opening editor: {type(e).__name__}[/]",
+                title="Error",
+                border_style="red",
+            )
+        )
+        return False

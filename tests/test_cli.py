@@ -141,11 +141,13 @@ def test_add_command(mock_open_editor):
         
         assert new_prompt_file is not None
         
-        # Check the content
+        # Check the content - verify using the Prompt model for format-agnostic parsing
+        from promptkeep.models import Prompt
         content = new_prompt_file.read_text()
-        assert "title: \"Test Prompt\"" in content
-        assert "description: \"A test prompt\"" in content
-        assert "\"test\", \"example\"" in content  # Tags
+        prompt = Prompt.from_markdown(content)
+        assert prompt.title == "Test Prompt"
+        assert prompt.description == "A test prompt"
+        assert sorted(prompt.tags) == ["example", "test"]  # Tags (sorted alphabetically)
 
 
 @patch("promptkeep.cli.open_editor")
@@ -379,4 +381,85 @@ This is a test prompt.""")
 
     with pytest.raises(typer.Exit) as exc_info:
         cli.edit_command(vault_path=str(vault_dir), tags=None)
-    assert exc_info.value.exit_code == 1 
+    assert exc_info.value.exit_code == 1
+
+
+# =============================================================================
+# Security Tests for open_editor
+# =============================================================================
+
+
+def test_open_editor_with_spaces_in_command(tmp_path):
+    """Test that editor commands with arguments like 'code --wait' work safely."""
+    test_file = tmp_path / "test.md"
+    test_file.write_text("test content")
+
+    with patch.dict(os.environ, {"EDITOR": "code --wait"}):
+        with patch("promptkeep.utils.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            result = open_editor(test_file)
+
+            assert result is True
+            mock_run.assert_called_once()
+            call_args = mock_run.call_args
+
+            # Verify list-based call (not shell=True)
+            # The first positional argument should be a list
+            assert isinstance(call_args[0][0], list), "subprocess.run should be called with a list"
+            # shell should not be True
+            assert call_args[1].get("shell") is not True, "shell=True should not be used"
+
+
+def test_open_editor_does_not_use_shell(tmp_path):
+    """Test that open_editor never uses shell=True with user input."""
+    test_file = tmp_path / "test.md"
+    test_file.write_text("test content")
+
+    # Test with simple editor
+    with patch.dict(os.environ, {"EDITOR": "vim"}):
+        with patch("promptkeep.utils.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            open_editor(test_file)
+
+            call_kwargs = mock_run.call_args[1]
+            assert call_kwargs.get("shell") is not True, "shell=True should not be used"
+
+
+def test_open_editor_handles_shell_metacharacters_safely(tmp_path):
+    """Test that shell metacharacters in EDITOR are not interpreted."""
+    test_file = tmp_path / "test.md"
+    test_file.write_text("test content")
+
+    # Malicious EDITOR attempting command injection
+    with patch.dict(os.environ, {"EDITOR": "vim; echo INJECTED"}):
+        with patch("promptkeep.utils.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            open_editor(test_file)
+
+            call_args = mock_run.call_args[0][0]
+            # The command should be passed as a list, treating the whole
+            # "vim; echo INJECTED" as a single command name (which will fail to find)
+            # or properly split by shlex (which treats ; as part of the string)
+            assert isinstance(call_args, list), "Command should be a list"
+            # The semicolon should NOT cause shell command separation
+            # With shlex.split, "vim; echo INJECTED" -> ["vim;", "echo", "INJECTED"]
+            # which means "vim;" is treated as the command name, not "vim" followed by shell command
+            assert "vim;" in str(call_args) or "vim; echo INJECTED" in str(call_args[0])
+
+
+def test_open_editor_with_quoted_paths(tmp_path):
+    """Test that paths with spaces are handled correctly."""
+    dir_with_space = tmp_path / "path with spaces"
+    dir_with_space.mkdir()
+    test_file = dir_with_space / "test file.md"
+    test_file.write_text("test content")
+
+    with patch.dict(os.environ, {"EDITOR": "vim"}):
+        with patch("promptkeep.utils.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            result = open_editor(test_file)
+
+            assert result is True
+            call_args = mock_run.call_args[0][0]
+            # The file path should be properly included in the list
+            assert str(test_file) in call_args
