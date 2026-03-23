@@ -57,4 +57,5 @@ htmlcov/
 architecture.txt
 
 # Documentation
-site/ 
+site/
+docs/superpowers/ 
