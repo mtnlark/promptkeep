@@ -7,7 +7,6 @@ It uses Typer for CLI argument parsing and Rich for terminal output formatting.
 """
 
 import shutil
-from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, List, Optional, TypeVar
@@ -29,7 +28,7 @@ from promptkeep.exceptions import (
     VaultNotFoundError,
 )
 from promptkeep.models import Prompt
-from promptkeep.utils import extract_prompt_content, sanitize_filename
+from promptkeep.utils import extract_prompt_content
 
 # Initialize the Typer app with a help message
 app = typer.Typer(
@@ -100,9 +99,17 @@ def handle_errors(func: F) -> F:
     return wrapper  # type: ignore[return-value]
 
 
-def get_context(vault_path: Optional[str] = None) -> AppContext:
-    """Get or create AppContext with optional vault override."""
+def get_context(vault_path: Optional[str] = None, *, validate: bool = True) -> AppContext:
+    """Get or create AppContext with optional vault override.
+
+    Args:
+        vault_path: Optional path to vault directory
+        validate: If True, validates that the vault exists and is properly structured.
+                  Raises VaultNotFoundError or VaultInvalidError if invalid.
+    """
     config = Config.from_environment(vault_override=vault_path)
+    if validate:
+        config.validate_vault()
     return AppContext.create_default(config)
 
 
@@ -229,9 +236,6 @@ def add_command(
 ) -> None:
     """Add a new prompt to your vault."""
     ctx = get_context(vault_path)
-    ctx.config.validate_vault()
-
-    prompts_dir = ctx.config.prompts_dir
 
     # Combine tags from --tag flags and the prompt string
     processed_tags = tags[:]
@@ -240,14 +244,8 @@ def add_command(
         processed_tags.extend(prompt_tags)
     processed_tags = sorted(list(set(processed_tags)))
 
-    # Create filename from title and timestamp
-    filename = sanitize_filename(title)
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"{filename}-{timestamp}.md"
-    prompt_path = prompts_dir / filename
-
-    # Check for existing similar prompts
-    existing_files = list(prompts_dir.glob(f"{sanitize_filename(title)}-*.md"))
+    # Check for existing similar prompts using repository
+    existing_files = ctx.repository.exists_similar(title)
     if existing_files:
         ctx.console.print(
             Panel.fit(
@@ -260,11 +258,11 @@ def add_command(
         if not typer.confirm("Do you want to continue?"):
             raise typer.Exit(0)
 
-    # Create the prompt using the Prompt model
+    # Create the prompt using repository.save()
     prompt = Prompt(
         title=title, description=description, tags=processed_tags, content=""
     )
-    prompt_path.write_text(prompt.to_markdown())
+    prompt_path = ctx.repository.save(prompt)
 
     ctx.console.print(
         Panel.fit(
@@ -317,7 +315,6 @@ def pick_command(
 ) -> None:
     """Select a prompt and copy its content to clipboard."""
     ctx = get_context(vault_path)
-    ctx.config.validate_vault()
 
     prompt_files = ctx.repository.get_file_paths(tags=list(tags) if tags else None)
 
@@ -377,7 +374,6 @@ def edit_command(
 ) -> None:
     """Edit an existing prompt in your vault."""
     ctx = get_context(vault_path)
-    ctx.config.validate_vault()
 
     prompt_files = ctx.repository.get_file_paths(tags=list(tags) if tags else None)
 
