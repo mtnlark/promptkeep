@@ -1,68 +1,37 @@
 # PromptKeep
 
-A CLI tool for managing and accessing AI prompts, built with Python.
+A command-line tool for managing reusable AI prompts.
 
-PromptKeep helps you organize, access, and reuse your AI prompts through a simple command-line interface. It stores prompts as Markdown files with YAML metadata, making them easy to manage and version control, and lets you quickly find stored prompts and copy them to your clipboard.
+PromptKeep stores prompts as Markdown files with YAML metadata, letting you organize, search, and copy them to your clipboard with a single command.
 
-## Features
-
-- Store prompts in Markdown files with YAML front matter
-- Fuzzy search for quick prompt retrieval
-- Copy prompts directly to clipboard
-- Local storage (no cloud dependencies)
-- Tag-based organization
-- Obsidian-compatible format
-
-## Installation
+## Quick Start
 
 ```bash
+# Install
 git clone https://github.com/mtnlark/promptkeep.git
 cd promptkeep
 pip install .
-```
 
-## Usage Basics
+# Create a vault
+promptkeep init
 
-1. Initialize a prompt vault:
-```bash
-promptkeep init ~/PromptVault
-```
+# Add a prompt
+promptkeep add --title "Code Review"
 
-2. Add a new prompt:
-```bash
-promptkeep add --title "Code Review Assistance"
-```
-
-3. Select and copy a prompt:
-```bash
+# Find and copy a prompt
 promptkeep pick
 ```
 
-4. Edit an existing prompt:
-```bash
-promptkeep edit
-```
+## Why PromptKeep?
 
-## Architecture
+- **Fast access**: Fuzzy search finds prompts instantly
+- **Organized**: Tag-based filtering keeps prompts manageable
+- **Portable**: Plain Markdown files work anywhere
+- **Private**: Local storage, no cloud dependencies
+- **Compatible**: Works with Obsidian and other Markdown tools
 
-PromptKeep follows clean architecture principles with clear separation of concerns:
+## Next Steps
 
-- **Dependency Injection** via `AppContext` composition root
-- **Protocol-based interfaces** for testability
-- **Repository pattern** for data access
-- **Custom exception hierarchy** for clear error handling
-
-See the [Reference](reference.md) for detailed module documentation.
-
-## Technical Details
-
-Built with:
-
-- Python 3.8+
-- Typer for CLI interface
-- Rich for terminal output
-- Pyperclip for clipboard operations
-
-## License
-
-MIT License
+- [Installation](installation.md) — Prerequisites and setup options
+- [Usage Guide](usage.md) — Commands and workflows
+- [Reference](reference.md) — Technical details and configuration
