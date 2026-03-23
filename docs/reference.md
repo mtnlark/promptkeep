@@ -231,12 +231,56 @@ Where:
 - **Tag length:** No explicit limit
 - **Number of prompts:** No explicit limit (limited by filesystem)
 
-## API Structure
+## Architecture
 
-PromptKeep is primarily a command-line tool, but its core functions are organized in modules:
+PromptKeep follows clean architecture principles with dependency injection and protocol-based interfaces.
 
-| Module              | Purpose                                     |
-|---------------------|---------------------------------------------|
-| promptkeep.cli      | Command-line interface and commands         |
-| promptkeep.utils    | Core utilities for file handling and clipboard |
+### Module Structure
+
+| Module                  | Purpose                                           |
+|-------------------------|---------------------------------------------------|
+| `promptkeep.cli`        | Command-line interface and commands               |
+| `promptkeep.config`     | Configuration management (immutable Config class) |
+| `promptkeep.context`    | Dependency injection container (AppContext)       |
+| `promptkeep.exceptions` | Custom exception hierarchy                        |
+| `promptkeep.models`     | Data models (Prompt dataclass)                    |
+| `promptkeep.protocols`  | Service interface definitions                     |
+| `promptkeep.repository` | Data access layer for prompt storage              |
+| `promptkeep.services`   | External service implementations                  |
+| `promptkeep.utils`      | Pure utility functions                            |
+
+### Key Patterns
+
+#### Dependency Injection
+
+All commands receive an `AppContext` that contains:
+
+- `config` - Application configuration
+- `clipboard` - Clipboard service (ClipboardService protocol)
+- `editor` - Editor service (EditorService protocol)
+- `selector` - Prompt selector (PromptSelector protocol)
+- `repository` - Data access (PromptRepositoryProtocol)
+- `console` - Rich console for output
+
+This enables easy testing by injecting mock implementations.
+
+#### Exception Hierarchy
+
+```
+PromptKeepError (base)
+├── VaultNotFoundError
+├── VaultInvalidError
+├── EditorError
+│   └── EditorNotFoundError
+└── SelectorError
+    └── SelectorNotFoundError
+```
+
+#### Configuration Precedence
+
+Configuration values are resolved in this order (highest to lowest):
+
+1. Explicit command-line arguments
+2. Environment variables (`PROMPTKEEP_VAULT`, `EDITOR`)
+3. Default values
 

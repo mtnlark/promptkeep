@@ -43,6 +43,17 @@ promptkeep pick
 promptkeep edit
 ```
 
+## Architecture
+
+PromptKeep follows clean architecture principles with clear separation of concerns:
+
+- **Dependency Injection** via `AppContext` composition root
+- **Protocol-based interfaces** for testability
+- **Repository pattern** for data access
+- **Custom exception hierarchy** for clear error handling
+
+See the [Reference](reference.md) for detailed module documentation.
+
 ## Technical Details
 
 Built with:

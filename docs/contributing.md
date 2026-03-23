@@ -66,6 +66,25 @@ Thank you for your interest in contributing to PromptKeep! This document provide
 
 ## Coding Guidelines
 
+### Architecture
+
+PromptKeep uses dependency injection and protocol-based interfaces. When contributing:
+
+- **Use `AppContext`** - Commands should receive dependencies via AppContext, not import them directly
+- **Follow protocols** - New services should implement the appropriate protocol from `protocols.py`
+- **Use custom exceptions** - Raise exceptions from `exceptions.py`, not generic Python exceptions
+- **Keep modules focused** - Each module has a single responsibility
+
+Example of using AppContext in a command:
+
+```python
+@app.command("mycommand")
+@handle_errors
+def my_command(vault_path: Optional[str] = None) -> None:
+    ctx = get_context(vault_path)
+    # Use ctx.repository, ctx.clipboard, ctx.editor, etc.
+```
+
 ### Style Guide
 
 - Follow [PEP 8](https://peps.python.org/pep-0008/) for Python code.
@@ -81,9 +100,18 @@ Thank you for your interest in contributing to PromptKeep! This document provide
 
 ### Testing
 
-- Write tests for new features and bug fixes.
-- Ensure all tests pass before submitting your changes.
-- We use `pytest` for testing.
+- Write tests for new features and bug fixes
+- Ensure all tests pass before submitting your changes
+- We use `pytest` for testing
+- Maintain test coverage above 90%
+
+Run tests with coverage:
+
+```bash
+pytest --cov=promptkeep --cov-report=term-missing
+```
+
+The dependency injection architecture makes testing easy - you can mock services by passing test doubles to AppContext.
 
 ## Documentation
 

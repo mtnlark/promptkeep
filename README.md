@@ -40,6 +40,29 @@ promptkeep add --title "Code Review Assistance"
 promptkeep pick
 ```
 
+## Architecture
+
+PromptKeep follows clean architecture principles with clear separation of concerns:
+
+```
+promptkeep/
+├── cli.py          # Command-line interface
+├── config.py       # Configuration management
+├── context.py      # Dependency injection container
+├── exceptions.py   # Custom exception hierarchy
+├── models.py       # Data models (Prompt)
+├── protocols.py    # Service interfaces
+├── repository.py   # Data access layer
+├── services.py     # External service integrations
+└── utils.py        # Pure utility functions
+```
+
+**Key patterns:**
+- **Dependency Injection** via `AppContext` composition root
+- **Protocol-based interfaces** for testability
+- **Repository pattern** for data access
+- **Custom exception hierarchy** for clear error handling
+
 ## Technical Details
 
 Built with:
@@ -47,6 +70,19 @@ Built with:
 - Typer for CLI interface
 - Rich for terminal output
 - Pyperclip for clipboard operations
+
+## Development
+
+```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=promptkeep
+```
 
 ## License
 
