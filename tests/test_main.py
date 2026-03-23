@@ -4,7 +4,7 @@ This module contains tests for the package entry points:
 - main.py (setuptools entry point)
 - __main__.py (python -m promptkeep)
 """
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 def test_main_entry_point():

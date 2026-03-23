@@ -10,7 +10,7 @@ import shutil
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Callable, List, Optional, TypeVar
+from typing import Any, Callable, List, Optional, TypeVar
 
 import typer
 from rich.console import Console
@@ -44,7 +44,7 @@ def handle_errors(func: F) -> F:
     """Decorator to convert PromptKeepError to user-friendly CLI output."""
 
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> None:
         try:
             return func(*args, **kwargs)
         except VaultNotFoundError:

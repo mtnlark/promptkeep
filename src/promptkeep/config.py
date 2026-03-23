@@ -62,7 +62,9 @@ class Config:
             vault_path = Path(DEFAULT_VAULT_PATH).expanduser().absolute()
 
         # Editor resolution: override > env var > default
-        editor = editor_override or os.environ.get(ENV_EDITOR, DEFAULT_EDITOR)
+        editor: str = (
+            editor_override or os.environ.get(ENV_EDITOR) or DEFAULT_EDITOR
+        )
 
         return cls(vault_path=vault_path, editor=editor)
 

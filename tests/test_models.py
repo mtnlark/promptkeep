@@ -8,7 +8,6 @@ capabilities. Tests verify:
 - Proper YAML escaping for special characters
 - Tag filtering functionality
 """
-import pytest
 from promptkeep.models import Prompt
 
 

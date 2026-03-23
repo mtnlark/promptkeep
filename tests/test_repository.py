@@ -7,10 +7,9 @@ This module contains tests for the file-based prompt repository, verifying:
 - Finding similar prompts
 - Error handling for file operations
 """
-from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pytest
+
 from promptkeep.models import Prompt
 from promptkeep.repository import PromptRepository
 
@@ -342,7 +341,9 @@ class TestPromptRepositoryExistsSimilar:
         prompts_dir.mkdir(parents=True)
 
         # Create existing prompt with similar name
-        (prompts_dir / "my-prompt-20260101-120000.md").write_text("---\ntitle: My Prompt\n---\nContent")
+        (prompts_dir / "my-prompt-20260101-120000.md").write_text(
+            "---\ntitle: My Prompt\n---\nContent"
+        )
 
         repo = PromptRepository(vault)
         similar = repo.exists_similar("My Prompt")
@@ -356,7 +357,9 @@ class TestPromptRepositoryExistsSimilar:
         prompts_dir = vault / "Prompts"
         prompts_dir.mkdir(parents=True)
 
-        (prompts_dir / "other-prompt-20260101-120000.md").write_text("---\ntitle: Other\n---\nContent")
+        (prompts_dir / "other-prompt-20260101-120000.md").write_text(
+            "---\ntitle: Other\n---\nContent"
+        )
 
         repo = PromptRepository(vault)
         similar = repo.exists_similar("My Unique Title")
@@ -397,7 +400,8 @@ class TestPromptRepositoryErrorHandling:
         repo = PromptRepository(vault)
         prompts = repo.list_all()
 
-        # Should get at least the valid one (invalid YAML is handled gracefully by Prompt.from_markdown)
+        # Should get at least the valid one (invalid YAML is handled
+        # gracefully by Prompt.from_markdown)
         assert len(prompts) >= 1
         titles = [p.title for p in prompts]
         assert "Valid" in titles
