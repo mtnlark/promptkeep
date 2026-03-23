@@ -410,54 +410,27 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#features" class="md-nav__link">
+  <a href="#quick-start" class="md-nav__link">
     <span class="md-ellipsis">
-      Features
+      Quick Start
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#installation" class="md-nav__link">
+  <a href="#why-promptkeep" class="md-nav__link">
     <span class="md-ellipsis">
-      Installation
+      Why PromptKeep?
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#usage-basics" class="md-nav__link">
+  <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
-      Usage Basics
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#architecture" class="md-nav__link">
-    <span class="md-ellipsis">
-      Architecture
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#technical-details" class="md-nav__link">
-    <span class="md-ellipsis">
-      Technical Details
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#license" class="md-nav__link">
-    <span class="md-ellipsis">
-      License
+      Next Steps
     </span>
   </a>
   
@@ -562,64 +535,37 @@
 
 
 <h1 id="promptkeep">PromptKeep<a class="headerlink" href="#promptkeep" title="Permanent link">&para;</a></h1>
-<p>A CLI tool for managing and accessing AI prompts, built with Python.</p>
-<p>PromptKeep helps you organize, access, and reuse your AI prompts through a simple command-line interface. It stores prompts as Markdown files with YAML metadata, making them easy to manage and version control, and lets you quickly find stored prompts and copy them to your clipboard.</p>
-<h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Store prompts in Markdown files with YAML front matter</li>
-<li>Fuzzy search for quick prompt retrieval</li>
-<li>Copy prompts directly to clipboard</li>
-<li>Local storage (no cloud dependencies)</li>
-<li>Tag-based organization</li>
-<li>Obsidian-compatible format</li>
-</ul>
-<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/mtnlark/promptkeep.git
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>promptkeep
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>pip<span class="w"> </span>install<span class="w"> </span>.
+<p>A command-line tool for managing reusable AI prompts.</p>
+<p>PromptKeep stores prompts as Markdown files with YAML metadata, letting you organize, search, and copy them to your clipboard with a single command.</p>
+<h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Install</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/mtnlark/promptkeep.git
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nb">cd</span><span class="w"> </span>promptkeep
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>pip<span class="w"> </span>install<span class="w"> </span>.
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># Create a vault</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>promptkeep<span class="w"> </span>init
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Add a prompt</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>promptkeep<span class="w"> </span>add<span class="w"> </span>--title<span class="w"> </span><span class="s2">&quot;Code Review&quot;</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1"># Find and copy a prompt</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>promptkeep<span class="w"> </span>pick
 </span></code></pre></div>
-<h2 id="usage-basics">Usage Basics<a class="headerlink" href="#usage-basics" title="Permanent link">&para;</a></h2>
-<ol>
-<li>
-<p>Initialize a prompt vault:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>promptkeep<span class="w"> </span>init<span class="w"> </span>~/PromptVault
-</span></code></pre></div></p>
-</li>
-<li>
-<p>Add a new prompt:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>promptkeep<span class="w"> </span>add<span class="w"> </span>--title<span class="w"> </span><span class="s2">&quot;Code Review Assistance&quot;</span>
-</span></code></pre></div></p>
-</li>
-<li>
-<p>Select and copy a prompt:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>promptkeep<span class="w"> </span>pick
-</span></code></pre></div></p>
-</li>
-<li>
-<p>Edit an existing prompt:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>promptkeep<span class="w"> </span>edit
-</span></code></pre></div></p>
-</li>
-</ol>
-<h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
-<p>PromptKeep follows clean architecture principles with clear separation of concerns:</p>
+<h2 id="why-promptkeep">Why PromptKeep?<a class="headerlink" href="#why-promptkeep" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Dependency Injection</strong> via <code>AppContext</code> composition root</li>
-<li><strong>Protocol-based interfaces</strong> for testability</li>
-<li><strong>Repository pattern</strong> for data access</li>
-<li><strong>Custom exception hierarchy</strong> for clear error handling</li>
+<li><strong>Fast access</strong>: Fuzzy search finds prompts instantly</li>
+<li><strong>Organized</strong>: Tag-based filtering keeps prompts manageable</li>
+<li><strong>Portable</strong>: Plain Markdown files work anywhere</li>
+<li><strong>Private</strong>: Local storage, no cloud dependencies</li>
+<li><strong>Compatible</strong>: Works with Obsidian and other Markdown tools</li>
 </ul>
-<p>See the <a href="reference/">Reference</a> for detailed module documentation.</p>
-<h2 id="technical-details">Technical Details<a class="headerlink" href="#technical-details" title="Permanent link">&para;</a></h2>
-<p>Built with:</p>
+<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Python 3.8+</li>
-<li>Typer for CLI interface</li>
-<li>Rich for terminal output</li>
-<li>Pyperclip for clipboard operations</li>
+<li><a href="installation/">Installation</a> — Prerequisites and setup options</li>
+<li><a href="usage/">Usage Guide</a> — Commands and workflows</li>
+<li><a href="reference/">Reference</a> — Technical details and configuration</li>
 </ul>
-<h2 id="license">License<a class="headerlink" href="#license" title="Permanent link">&para;</a></h2>
-<p>MIT License</p>
 
 
 
@@ -640,7 +586,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="March 23, 2026 19:29:34">March 23, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="March 23, 2026 19:40:04">March 23, 2026</span>
   </span>
 
     
