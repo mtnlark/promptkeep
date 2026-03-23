@@ -5,62 +5,115 @@ This module implements the command-line interface for PromptKeep, providing comm
 for initializing a prompt vault, adding new prompts, and selecting existing prompts.
 It uses Typer for CLI argument parsing and Rich for terminal output formatting.
 """
+
 import shutil
-import subprocess
 from datetime import datetime
+from functools import wraps
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional, TypeVar
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from promptkeep.config import Config
 from promptkeep.constants import DEFAULT_VAULT_PATH, PROMPTS_DIR_NAME
-from promptkeep.models import Prompt
-from promptkeep.repository import PromptRepository
-from promptkeep.utils import (
-    copy_to_clipboard,
-    extract_prompt_content,
-    open_editor,
-    sanitize_filename,
-    validate_vault_path,
+from promptkeep.context import AppContext
+from promptkeep.exceptions import (
+    EditorError,
+    EditorNotFoundError,
+    PromptKeepError,
+    SelectorNotFoundError,
+    VaultInvalidError,
+    VaultNotFoundError,
 )
+from promptkeep.models import Prompt
+from promptkeep.utils import extract_prompt_content, sanitize_filename
 
 # Initialize the Typer app with a help message
-app = typer.Typer(help="PromptKeep - A CLI tool for managing and accessing your AI prompts")
+app = typer.Typer(
+    help="PromptKeep - A CLI tool for managing and accessing your AI prompts"
+)
 console = Console()
 
-# Awk script for fzf preview - extracts title, tags and content from prompt files
-_FZF_PREVIEW_SCRIPT = """awk '
-    BEGIN { in_yaml=0; printed_header=0 }
-    /^---$/ { in_yaml = !in_yaml; next }
-    in_yaml {
-        if ($1 == "title:") title = substr($0, 8)
-        if ($1 == "tags:") { tags=1; next }
-        if (tags && $1 == "-") tag_list = tag_list ", " substr($0, 3)
-    }
-    !in_yaml && !printed_header {
-        gsub(/"/, "", title)
-        sub(/, /, "", tag_list)
-        print "Title: " title
-        if (tag_list) print "Tags:  " tag_list
-        print "----------------------------------------"
-        printed_header=1
-        next
-    }
-    !in_yaml { print }
-' {}'"""
+F = TypeVar("F", bound=Callable[..., None])
+
+
+def handle_errors(func: F) -> F:
+    """Decorator to convert PromptKeepError to user-friendly CLI output."""
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except VaultNotFoundError:
+            console.print(
+                Panel.fit(
+                    "[red]Error: No vault found.[/]\n"
+                    "Use 'promptkeep init' to create a vault or specify --vault.",
+                    title="Error",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1) from None
+        except VaultInvalidError as e:
+            console.print(
+                Panel.fit(
+                    f"[red]Error: Invalid vault at {e.vault_path}[/]\n"
+                    "Make sure this is a valid prompt vault with a Prompts directory.",
+                    title="Error",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1) from None
+        except EditorNotFoundError as e:
+            console.print(
+                Panel.fit(
+                    f"[red]Error: Editor '{e.editor}' not found.[/]\n"
+                    "Please set the EDITOR environment variable to your preferred editor.",
+                    title="Error",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1) from None
+        except EditorError as e:
+            console.print(
+                Panel.fit(
+                    f"[red]Error: {e}[/]",
+                    title="Error",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1) from None
+        except SelectorNotFoundError:
+            console.print(
+                Panel.fit(
+                    "[red]Error: fzf not found.[/]\n"
+                    "Please install fzf to use this command.",
+                    title="Error",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1) from None
+
+    return wrapper  # type: ignore[return-value]
+
+
+def get_context(vault_path: Optional[str] = None) -> AppContext:
+    """Get or create AppContext with optional vault override."""
+    config = Config.from_environment(vault_override=vault_path)
+    return AppContext.create_default(config)
 
 
 def create_prompt_template(prompts_dir: Path) -> None:
     """Create an example prompt file to demonstrate the expected format.
-    
+
     This function creates a template file that shows users:
     - The required YAML front matter structure
     - How to format metadata (title, description, tags)
     - Where to place the actual prompt content
-    
+
     Args:
         prompts_dir: Directory where the template should be created
     """
@@ -88,20 +141,20 @@ def init_command(
     ),
 ) -> None:
     """Initialize a new prompt vault.
-    
+
     This command creates a directory structure for storing prompts:
     - Creates the main vault directory
     - Creates a 'Prompts' subdirectory
     - Adds an example prompt template
-    
+
     If the directory already exists, it will be overwritten.
-    
+
     Args:
         vault_path: Path where the vault should be created (defaults to ~/PromptVault)
     """
     # Expand user directory (~) and make path absolute
     expanded_path = Path(vault_path).expanduser().absolute()
-    
+
     # Create the vault directory with progress indicator
     with Progress(
         SpinnerColumn(),
@@ -109,16 +162,16 @@ def init_command(
         console=console,
     ) as progress:
         progress.add_task(description="Creating prompt vault...", total=None)
-        
+
         # Remove existing directory if it exists
         if expanded_path.exists():
             shutil.rmtree(expanded_path)
-        
+
         # Create the vault directory and prompts subdirectory
         expanded_path.mkdir(parents=True, exist_ok=True)
         prompts_dir = expanded_path / PROMPTS_DIR_NAME
         prompts_dir.mkdir(exist_ok=True)
-        
+
         # Create template prompt
         create_prompt_template(prompts_dir)
 
@@ -139,95 +192,52 @@ def init_command(
 
 
 @app.command("add")
+@handle_errors
 def add_command(
     title: str = typer.Option(
         ...,
-        "--title", "-t",
+        "--title",
+        "-t",
         help="Title of the prompt",
         prompt="Enter a title for your prompt",
     ),
     description: str = typer.Option(
         "",
-        "--description", "-d",
+        "--description",
+        "-d",
         help="Description of the prompt",
         prompt="Enter a description (optional)",
     ),
-    # Option for handling multiple --tag flags
     tags: List[str] = typer.Option(
-        [], # Default to empty list
-        "--tag", # Keep the flag name consistent
-        help="Tags for the prompt (can be specified multiple times, e.g., --tag tag1 --tag tag2)",
-        # Removed prompt= from here
+        [],
+        "--tag",
+        help="Tags for the prompt (can be specified multiple times)",
     ),
-    # Separate hidden option to capture raw string input from the prompt
     tags_prompt_str: Optional[str] = typer.Option(
-        "", # Default to empty string to allow skipping prompt
+        "",
         prompt="Enter tags separated by commas (optional)",
         help="Internal use for prompt input",
-        hidden=True, # Hide this from --help output
-        show_default=False, # Don't show the default in help
+        hidden=True,
+        show_default=False,
     ),
     vault_path: Optional[str] = typer.Option(
         None,
-        "--vault", "-v",
+        "--vault",
+        "-v",
         help="Path to the prompt vault (defaults to ~/PromptVault or PROMPTKEEP_VAULT env var)",
     ),
 ) -> None:
-    """Add a new prompt to your vault.
-    
-    This command:
-    1. Creates a new markdown file with YAML front matter
-    2. Opens your default editor to write the prompt content
-    3. Saves the file with a unique name based on title and timestamp
-    
-    Tags can be provided either as multiple --tag options or as a comma-separated
-    list when prompted. These tags make it easier to find and filter prompts later
-    using the 'pick' and 'edit' commands.
-    
-    Usage:
-        1. Provide a title, description, and tags for your prompt
-        2. Your default text editor will open to write the prompt content
-        3. Save and exit the editor to create the prompt file
-    
-    Examples:
-        promptkeep add --title "API Documentation" --tag coding --tag docs
-        promptkeep add --title "Email Template" --description "Professional response" --vault /path/to/vault
-        promptkeep add  # Interactive prompts for all fields
-    
-    Args:
-        title: The title of the prompt
-        description: Optional description of the prompt
-        tags: Optional list of tags for categorizing the prompt (from --tag flags)
-        tags_prompt_str: Optional string of comma-separated tags (from prompt)
-        vault_path: Optional path to the prompt vault
-        
-    Raises:
-        typer.Exit: If no vault exists or if user cancels the operation
-    """
-    # Validate vault path
-    try:
-        expanded_vault = validate_vault_path(vault_path)
-    except typer.Exit:
-        console.print(
-            Panel.fit(
-                "[yellow]No vault found. Would you like to create one?[/]\n"
-                "Run 'promptkeep init' to create a new vault.",
-                title="Warning",
-                border_style="yellow",
-            )
-        )
-        raise typer.Exit(1) from None
+    """Add a new prompt to your vault."""
+    ctx = get_context(vault_path)
+    ctx.config.validate_vault()
 
-    prompts_dir = expanded_vault / PROMPTS_DIR_NAME
+    prompts_dir = ctx.config.prompts_dir
 
     # Combine tags from --tag flags and the prompt string
-    processed_tags = tags[:] # Start with tags from flags
-    # Check if tags_prompt_str is actually a string (handles Typer OptionInfo in direct calls)
+    processed_tags = tags[:]
     if tags_prompt_str and isinstance(tags_prompt_str, str):
         prompt_tags = [tag.strip() for tag in tags_prompt_str.split(",") if tag.strip()]
         processed_tags.extend(prompt_tags)
-        
-    # Ensure uniqueness and sort for consistency
     processed_tags = sorted(list(set(processed_tags)))
 
     # Create filename from title and timestamp
@@ -239,7 +249,7 @@ def add_command(
     # Check for existing similar prompts
     existing_files = list(prompts_dir.glob(f"{sanitize_filename(title)}-*.md"))
     if existing_files:
-        console.print(
+        ctx.console.print(
             Panel.fit(
                 f"[yellow]Warning: Similar prompts already exist:[/]\n"
                 f"{chr(10).join(f'- {f.name}' for f in existing_files)}",
@@ -250,19 +260,13 @@ def add_command(
         if not typer.confirm("Do you want to continue?"):
             raise typer.Exit(0)
 
-    # Create the prompt using the Prompt model (handles YAML escaping properly)
+    # Create the prompt using the Prompt model
     prompt = Prompt(
-        title=title,
-        description=description,
-        tags=processed_tags,
-        content=""  # Content will be added by the user in the editor
+        title=title, description=description, tags=processed_tags, content=""
     )
-
-    # Write the template to the file using the model's YAML serialization
     prompt_path.write_text(prompt.to_markdown())
 
-    # Open the editor for the user to edit the content
-    console.print(
+    ctx.console.print(
         Panel.fit(
             f"Opening editor for you to write your prompt content.\n"
             f"File will be saved at: [bold blue]{prompt_path}[/]",
@@ -270,23 +274,23 @@ def add_command(
             border_style="blue",
         )
     )
-    
-    if not open_editor(prompt_path):
-        # If editor failed to open, remove the file
-        prompt_path.unlink()
-        raise typer.Exit(1)
 
-    # Check if file still exists (user might have deleted it)
+    try:
+        ctx.editor.open(prompt_path)
+    except PromptKeepError:
+        prompt_path.unlink()
+        raise
+
     if prompt_path.exists():
-        console.print(
+        ctx.console.print(
             Panel.fit(
-                f"✅ Prompt created successfully at: [bold blue]{prompt_path}[/]",
+                f"Prompt created successfully at: [bold blue]{prompt_path}[/]",
                 title="Success",
                 border_style="green",
             )
         )
     else:
-        console.print(
+        ctx.console.print(
             Panel.fit(
                 "[yellow]Note: Prompt file was not saved.[/]",
                 title="Warning",
@@ -296,64 +300,31 @@ def add_command(
 
 
 @app.command("pick")
+@handle_errors
 def pick_command(
     vault_path: Optional[str] = typer.Option(
         None,
-        "--vault", "-v",
+        "--vault",
+        "-v",
         help="Path to the prompt vault (defaults to ~/PromptVault or PROMPTKEEP_VAULT env var)",
     ),
     tags: Optional[List[str]] = typer.Option(
         None,
-        "--tag", "-t",
+        "--tag",
+        "-t",
         help="Filter prompts by tag (can be specified multiple times)",
     ),
 ) -> None:
-    """Select a prompt and copy its content to clipboard.
-    
-    This command provides an interactive selection interface that:
-    1. Lists all available prompts in the vault
-    2. Shows a preview of each prompt including:
-       - Title from YAML front matter
-       - Tags from YAML front matter
-       - Full prompt content
-    3. Uses fzf for fuzzy finding and selection
-    4. Copies the selected prompt's content to clipboard
-    
-    You can filter prompts by tags using the --tag option. When multiple tags
-    are specified, only prompts containing ALL specified tags will be shown.
-    
-    Usage:
-        1. Run the command to see all prompts for selection
-        2. Use fuzzy search to filter prompts by title or content
-        3. Use arrow keys to navigate and press Enter to select
-        4. The prompt content will be automatically copied to your clipboard
-        5. Paste the content into any application (e.g., ChatGPT, email, document)
-    
-    Examples:
-        promptkeep pick                             # Select from all prompts
-        promptkeep pick --tag job-search            # Select from prompts with tag "job-search"
-        promptkeep pick --tag coding --tag python   # Select prompts with both "coding" and "python" tags
-        promptkeep pick --vault /path/to/vault      # Specify custom vault location
-    
-    Args:
-        vault_path: Optional path to the prompt vault
-        tags: Optional list of tags to filter prompts by
-        
-    Raises:
-        typer.Exit: If no prompts are found, if selection is cancelled,
-                   or if fzf is not installed
-    """
-    # Validate vault path
-    expanded_vault = validate_vault_path(vault_path)
+    """Select a prompt and copy its content to clipboard."""
+    ctx = get_context(vault_path)
+    ctx.config.validate_vault()
 
-    # Use repository for file operations and tag filtering
-    repo = PromptRepository(expanded_vault)
-    prompt_files = repo.get_file_paths(tags=list(tags) if tags else None)
+    prompt_files = ctx.repository.get_file_paths(tags=list(tags) if tags else None)
 
     if not prompt_files:
         if tags:
             tag_list = ", ".join(f"'{tag}'" for tag in tags)
-            console.print(
+            ctx.console.print(
                 Panel.fit(
                     f"[yellow]No prompts found with tags: {tag_list}[/]",
                     title="Warning",
@@ -361,7 +332,7 @@ def pick_command(
                 )
             )
         else:
-            console.print(
+            ctx.console.print(
                 Panel.fit(
                     "[yellow]No prompts found in the vault.[/]\n"
                     "Use 'promptkeep add' to create a new prompt.",
@@ -371,35 +342,17 @@ def pick_command(
             )
         raise typer.Exit(1)
 
-    # Use fzf to select a file with enhanced preview showing title, tags, and content
-    try:
-        selected_file = subprocess.check_output(
-            ["fzf", "--prompt", "Select a prompt: ", "--preview", _FZF_PREVIEW_SCRIPT],
-            input="\n".join(str(f) for f in prompt_files).encode(),
-        ).decode().strip()
-    except subprocess.CalledProcessError:
-        # User cancelled the selection
-        raise typer.Exit(0) from None
-    except FileNotFoundError:
-        console.print(
-            Panel.fit(
-                "[red]Error: fzf not found.[/]\n"
-                "Please install fzf to use the pick command.",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1) from None
+    selected_file = ctx.selector.select(prompt_files, "Select a prompt: ")
+    if not selected_file:
+        raise typer.Exit(0)
 
-    # Read and extract the prompt content
-    content = Path(selected_file).read_text()
+    content = selected_file.read_text()
     prompt_content = extract_prompt_content(content)
+    ctx.clipboard.copy(prompt_content)
 
-    # Copy to clipboard
-    copy_to_clipboard(prompt_content)
-    console.print(
+    ctx.console.print(
         Panel.fit(
-            "✅ Prompt copied to clipboard",
+            "Prompt copied to clipboard",
             title="Success",
             border_style="green",
         )
@@ -407,65 +360,31 @@ def pick_command(
 
 
 @app.command("edit")
+@handle_errors
 def edit_command(
     vault_path: Optional[str] = typer.Option(
         None,
-        "--vault", "-v",
+        "--vault",
+        "-v",
         help="Path to the prompt vault (defaults to ~/PromptVault or PROMPTKEEP_VAULT env var)",
     ),
     tags: Optional[List[str]] = typer.Option(
         None,
-        "--tag", "-t",
+        "--tag",
+        "-t",
         help="Filter prompts by tag (can be specified multiple times)",
     ),
 ) -> None:
-    """Edit an existing prompt in your vault.
-    
-    This command provides an interactive selection interface that:
-    1. Lists all available prompts in the vault
-    2. Shows a preview of each prompt including:
-       - Title from YAML front matter
-       - Tags from YAML front matter
-       - Full prompt content
-    3. Uses fzf for fuzzy finding and selection
-    4. Opens the selected prompt in your editor
-    
-    You can filter prompts by tags using the --tag option to quickly
-    find the prompt you want to edit. When multiple tags are specified,
-    only prompts containing ALL specified tags will be shown.
-    
-    Usage:
-        1. Run the command to see all prompts for selection
-        2. Use fuzzy search to filter prompts by title or content
-        3. Use arrow keys to navigate and press Enter to select
-        4. Edit the prompt in your default text editor
-        5. Save and exit the editor to update the prompt
-    
-    Examples:
-        promptkeep edit                             # Edit any prompt
-        promptkeep edit --tag job-search            # Edit prompts with tag "job-search"
-        promptkeep edit --tag python --tag ml       # Edit prompts with both "python" and "ml" tags
-        promptkeep edit --vault /path/to/vault      # Specify custom vault location
-    
-    Args:
-        vault_path: Optional path to the prompt vault
-        tags: Optional list of tags to filter prompts by
-        
-    Raises:
-        typer.Exit: If no prompts are found, if selection is cancelled,
-                   or if fzf is not installed
-    """
-    # Validate vault path
-    expanded_vault = validate_vault_path(vault_path)
+    """Edit an existing prompt in your vault."""
+    ctx = get_context(vault_path)
+    ctx.config.validate_vault()
 
-    # Use repository for file operations and tag filtering
-    repo = PromptRepository(expanded_vault)
-    prompt_files = repo.get_file_paths(tags=list(tags) if tags else None)
+    prompt_files = ctx.repository.get_file_paths(tags=list(tags) if tags else None)
 
     if not prompt_files:
         if tags:
             tag_list = ", ".join(f"'{tag}'" for tag in tags)
-            console.print(
+            ctx.console.print(
                 Panel.fit(
                     f"[yellow]No prompts found with tags: {tag_list}[/]",
                     title="Warning",
@@ -473,7 +392,7 @@ def edit_command(
                 )
             )
         else:
-            console.print(
+            ctx.console.print(
                 Panel.fit(
                     "[yellow]No prompts found in the vault.[/]\n"
                     "Use 'promptkeep add' to create a new prompt.",
@@ -483,28 +402,11 @@ def edit_command(
             )
         raise typer.Exit(1)
 
-    # Use fzf to select a file with enhanced preview showing title, tags, and content
-    try:
-        selected_file = subprocess.check_output(
-            ["fzf", "--prompt", "Select a prompt to edit: ", "--preview", _FZF_PREVIEW_SCRIPT],
-            input="\n".join(str(f) for f in prompt_files).encode(),
-        ).decode().strip()
-    except subprocess.CalledProcessError:
-        # User cancelled the selection
-        raise typer.Exit(0) from None
-    except FileNotFoundError:
-        console.print(
-            Panel.fit(
-                "[red]Error: fzf not found.[/]\n"
-                "Please install fzf to use the edit command.",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1) from None
+    selected_file = ctx.selector.select(prompt_files, "Select a prompt to edit: ")
+    if not selected_file:
+        raise typer.Exit(0)
 
-    # Open the selected file in the editor
-    console.print(
+    ctx.console.print(
         Panel.fit(
             f"Opening editor for you to edit the prompt.\n"
             f"File: [bold blue]{selected_file}[/]",
@@ -512,20 +414,12 @@ def edit_command(
             border_style="blue",
         )
     )
-    
-    if not open_editor(Path(selected_file)):
-        console.print(
-            Panel.fit(
-                "[red]Error: Failed to open editor.[/]",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1)
 
-    console.print(
+    ctx.editor.open(selected_file)
+
+    ctx.console.print(
         Panel.fit(
-            "✅ Prompt updated successfully",
+            "Prompt updated successfully",
             title="Success",
             border_style="green",
         )
@@ -538,4 +432,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main() 
+    main()
