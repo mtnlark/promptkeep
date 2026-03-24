@@ -19,7 +19,7 @@ Store prompts as Markdown files, search with fuzzy finding, and copy to clipboar
 # Install (requires Python 3.8+ and fzf)
 git clone https://github.com/mtnlark/promptkeep.git
 cd promptkeep
-pip install .
+pipx install .   # recommended — or: pip install .
 
 # Create a vault
 promptkeep init
